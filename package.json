@@ -1,0 +1,8 @@
+{
+  "name": "hormiguero",
+  "private": true,
+  "description": "Tablero web de gastos personales mensuales.",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

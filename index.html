@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hormiguero</title>
+<meta name="description" content="Tus gastos del mes, todos juntos.">
+<meta name="theme-color" content="#FFD54F">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+
+<header class="encabezado">
+    <div class="marca">
+        <img src="icon.png" alt="Logo de Hormiguero">
+        <div>
+            <h1>Hormiguero</h1>
+            <p>Tus gastos del mes, todos juntos</p>
+        </div>
+    </div>
+    <div class="encabezado-acciones">
+        <div class="estado">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2E7D32" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+            Guardado en este dispositivo
+        </div>
+        <button type="button" class="boton boton-oscuro" id="botonAjustes">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>
+            Ajustes
+        </button>
+    </div>
+</header>
+
+<main class="contenido">
+
+    <!-- Sin datos todavía -->
+    <section class="tarjeta bienvenida" id="bienvenida" hidden>
+        <h2>Todavía no hay gastos</h2>
+        <p>Exportá el Excel desde Ants (botón de exportar en la app) y cargalo acá. Hormiguero lo lee en tu navegador: los datos no salen de este dispositivo.</p>
+        <div class="acciones-carga" style="max-width: 420px; margin: 0 auto">
+            <button type="button" class="boton boton-violeta" data-accion="cargar-documento">Cargar documento</button>
+        </div>
+    </section>
+
+    <div id="tablero" hidden>
+
+        <section class="tarjeta periodo" aria-label="Período">
+            <div class="periodo-grupo" role="group" aria-label="Año">
+                <span class="etiqueta-chica">AÑO</span>
+                <span id="anios" class="periodo-grupo"></span>
+            </div>
+            <div class="periodo-grupo" role="group" aria-label="Mes">
+                <span class="etiqueta-chica">MES</span>
+                <span id="meses" class="periodo-grupo"></span>
+            </div>
+            <label class="casilla"><input type="checkbox" id="sinAlacranes">Ver sin alacranes</label>
+        </section>
+
+        <div class="principales" style="margin-top: 20px">
+            <section class="tarjeta-violeta">
+                <div class="principal-titulo">Este mes las hormigas se llevaron</div>
+                <div class="numero-grande" id="totalHormigas"></div>
+                <div class="principal-detalle" id="detalleHormigas"></div>
+            </section>
+            <section class="tarjeta">
+                <div class="principal-titulo">Total del mes</div>
+                <div class="numero-grande" id="totalMes"></div>
+                <div class="principal-detalle" id="detalleMes"></div>
+            </section>
+            <section class="tarjeta">
+                <div class="principal-titulo">Alacranes</div>
+                <div class="numero-grande" id="totalAlacranes" style="color: #3E2723"></div>
+                <div class="principal-detalle" id="detalleAlacranes"></div>
+            </section>
+        </div>
+
+        <div class="categorias" style="margin-top: 20px">
+            <section class="cat cat-fijo" id="cat-fijo"></section>
+            <div class="grupo-hormiga">
+                <div class="grupo-hormiga-titulo" id="tituloGrupoHormiga"></div>
+                <div class="grupo-hormiga-fila">
+                    <section class="cat cat-necesario" id="cat-necesario"></section>
+                    <section class="cat cat-evitable" id="cat-evitable"></section>
+                    <section class="cat cat-innecesario" id="cat-innecesario"></section>
+                </div>
+            </div>
+            <section class="cat cat-ahorro" id="cat-ahorro"></section>
+        </div>
+
+        <div class="dos-columnas" style="margin-top: 20px">
+            <section class="tarjeta">
+                <h2>Gastos hormiga por semana</h2>
+                <div class="subtitulo" id="subtituloSemanas"></div>
+                <div class="lienzo-barras"><canvas id="graficoSemanas" role="img" aria-label="Gastos hormiga por semana"></canvas></div>
+                <div class="leyenda">
+                    <span><span class="cuadradito" style="background: #2E7D32"></span>Necesario</span>
+                    <span><span class="cuadradito" style="background: #EF6C00"></span>Evitable</span>
+                    <span><span class="cuadradito" style="background: #C62828"></span>Innecesario</span>
+                </div>
+            </section>
+
+            <section class="tarjeta reparto">
+                <h2>Cómo se repartió el mes</h2>
+                <div class="reparto-cuerpo">
+                    <div class="anillo">
+                        <canvas id="graficoReparto" role="img" aria-label="Reparto del mes por categoría"></canvas>
+                        <div class="anillo-centro"><b id="porcentajeHormigas"></b>fue en<br>hormigas</div>
+                    </div>
+                    <div class="reparto-lista" id="repartoLista"></div>
+                </div>
+                <div class="acciones-carga">
+                    <button type="button" class="boton boton-violeta" data-accion="cargar-documento">Cargar documento</button>
+                    <button type="button" class="boton boton-cuadrado" id="botonManual">Cargar gasto manual</button>
+                </div>
+            </section>
+        </div>
+
+        <div class="dos-columnas" style="margin-top: 20px">
+            <section class="tarjeta">
+                <h2>Hormigas que más pican</h2>
+                <ul class="lista" id="listaPican"></ul>
+            </section>
+            <section class="tarjeta">
+                <h2>Picaduras que más dolieron</h2>
+                <ul class="lista" id="listaDolieron"></ul>
+            </section>
+        </div>
+
+        <section class="tarjeta" style="margin-top: 20px">
+            <div class="movimientos-cabeza">
+                <h2 id="tituloMovimientos">Últimos movimientos</h2>
+                <div class="filtros" role="group" aria-label="Filtrar movimientos" id="filtrosMovimientos">
+                    <button type="button" class="boton" data-filtro="todos" aria-pressed="true">Todos</button>
+                    <button type="button" class="boton" data-filtro="ants" aria-pressed="false">Ants</button>
+                    <button type="button" class="boton" data-filtro="tarjeta" aria-pressed="false">Tarjetas</button>
+                    <button type="button" class="boton" data-filtro="fijo" aria-pressed="false">Fijos</button>
+                </div>
+            </div>
+            <div class="tabla-contenedor">
+                <table>
+                    <thead>
+                        <tr><th>FECHA</th><th>CONCEPTO</th><th>FUENTE</th><th>CATEGORÍA</th><th style="text-align: right">MONTO</th></tr>
+                    </thead>
+                    <tbody id="cuerpoMovimientos"></tbody>
+                </table>
+            </div>
+            <p class="vacio-texto" id="movimientosVacio" hidden>No hay movimientos con este filtro.</p>
+            <button type="button" class="ver-todos" id="verTodos">Ver todos los movimientos</button>
+        </section>
+
+    </div>
+</main>
+
+<input type="file" id="archivo" accept=".xlsx,.xls,.csv,.pdf" hidden>
+
+<dialog id="dialogoAjustes" aria-labelledby="tituloAjustes">
+    <div class="tarjeta">
+        <h2 id="tituloAjustes">Ajustes</h2>
+        <p class="secundario">La conexión con Google Drive, el tipo de cambio y las reglas por comercio llegan en las próximas fases.</p>
+        <p id="resumenDatos"></p>
+        <div id="confirmarBorrado" hidden>
+            <p><b>¿Borrar todos los gastos de este dispositivo?</b> No se puede deshacer. Lo que tengas en Ants no se toca.</p>
+        </div>
+        <div class="dialogo-botones">
+            <button type="button" class="boton boton-peligro" id="botonBorrar">Borrar todos los datos</button>
+            <button type="button" class="boton" id="cerrarAjustes">Cerrar</button>
+        </div>
+    </div>
+</dialog>
+
+<div class="aviso" id="aviso" role="status" hidden></div>
+
+<script src="lib/xlsx.full.min.js"></script>
+<script src="lib/chart.umd.min.js"></script>
+<script src="js/formato.js"></script>
+<script src="js/calculos.js"></script>
+<script src="js/datos.js"></script>
+<script src="js/lectores/ants-excel.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
