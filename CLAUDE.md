@@ -123,8 +123,8 @@ De arriba hacia abajo:
 1. **Encabezado amarillo:** logo (hormiga con moneda, `icon.png` del repo de Ants), título "Hormiguero", subtítulo "Tus gastos del mes, todos juntos", estado "Sincronizado con Google Drive" y botón **Ajustes** (engranaje).
 2. **Selector de período:** botones de año y de meses (los meses sin datos se ven punteados) y la casilla **"Ver sin alacranes"**.
 3. **Tres tarjetas principales:**
-   - **"Este mes las hormigas se llevaron"** (violeta, destacada): total de necesario + evitable + innecesario. Debajo: "De eso, $X (N%) se podía evitar" (evitable + innecesario).
-   - **"Total del mes":** con la variación contra el mes anterior. En gastos, **subir es malo**: flecha hacia arriba en rojo, hacia abajo en verde. Si no hay mes anterior, "Sin datos de [mes] para comparar".
+   - **"Total del mes"** (violeta, destacada, a la izquierda): con la variación contra el mes anterior. En gastos, **subir es malo**: flecha hacia arriba en rojo, hacia abajo en verde (en tonos claros sobre el violeta). Si no hay mes anterior, "Sin datos de [mes] para comparar".
+   - **"Este mes las hormigas se llevaron"** (al centro): total de necesario + evitable + innecesario. Debajo: "De eso, $X (N%) se podía evitar" (evitable + innecesario).
    - **"Alacranes":** total y cantidad del mes.
 4. **Fila de categorías:**
    - Tarjeta **Fijos** (verde azulado).

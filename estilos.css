@@ -282,6 +282,9 @@ h2 {
 .variacion { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; }
 .variacion.sube { color: #C62828; }
 .variacion.baja { color: #2E7D32; }
+/* Sobre el violeta, el rojo y el verde oscuros no se leen */
+.tarjeta-violeta .variacion.sube { color: #FFB3A7; }
+.tarjeta-violeta .variacion.baja { color: #A5F2B5; }
 
 /* ---------- Fila de categorías ---------- */
 
