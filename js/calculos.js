@@ -119,6 +119,91 @@
             (b.montoARS || 0) - (a.montoARS || 0));
     }
 
-    H.calculos = { resumenMes, semanas, hormigasPorSemana, hormigasQueMasPican, picadurasQueMasDolieron, ordenarMovimientos };
+    // ---------- Historial ----------
+
+    function mesesConDatos(todos) {
+        return [...new Set(todos.map(g => g.mes))].sort();
+    }
+
+    // Los `cuantos` meses que terminan en `hasta`, sin los del principio
+    // que no tienen datos. Cada uno con su resumen.
+    function evolucion(todos, hasta, opciones = {}, cuantos = 12) {
+        const conDatos = mesesConDatos(todos);
+        const meses = [hasta];
+        while (meses.length < cuantos) meses.unshift(H.mesAnterior(meses[0]));
+        const primero = conDatos.find(m => m <= hasta);
+        return meses
+            .filter(m => primero && m >= primero)
+            .map(m => resumenMes(todos, m, opciones));
+    }
+
+    // El total de cada mes de `anio` y del anterior. El acumulado compara
+    // solo meses comparables: con datos en los dos años y ya terminados
+    // (anteriores a `mesEnCurso`, que todavía está a medio cargar). Si no,
+    // un año con más meses cargados o un mes recién empezado distorsionan.
+    function comparacionAnual(todos, anio, opciones = {}, mesEnCurso = "9999-99") {
+        const conDatos = new Set(mesesConDatos(todos));
+        const total = mes => resumenMes(todos, mes, opciones).total;
+        const meses = [];
+        for (let m = 1; m <= 12; m++) {
+            const mm = String(m).padStart(2, "0");
+            const actual = `${anio}-${mm}`, anterior = `${anio - 1}-${mm}`;
+            meses.push({
+                numero: m,
+                actual: conDatos.has(actual) ? total(actual) : null,
+                anterior: conDatos.has(anterior) ? total(anterior) : null,
+                comparable: conDatos.has(actual) && conDatos.has(anterior) && actual < mesEnCurso,
+            });
+        }
+        const comparables = meses.filter(x => x.comparable);
+        const suma = clave => comparables.reduce((t, x) => t + x[clave], 0);
+        return {
+            anio,
+            meses,
+            comparables: comparables.map(x => x.numero),
+            acumuladoActual: suma("actual"),
+            acumuladoAnterior: suma("anterior"),
+            totalActual: meses.reduce((t, x) => t + (x.actual || 0), 0),
+            hayAnterior: meses.some(x => x.anterior != null),
+        };
+    }
+
+    // Por categoría (más "hormigas" y "total"): este mes, el anterior y el
+    // promedio de los 12 meses previos que tienen datos.
+    function comparacionMes(todos, mes, opciones = {}) {
+        const conDatos = new Set(mesesConDatos(todos));
+        const previos = [];
+        let m = mes;
+        for (let i = 0; i < 12; i++) {
+            m = H.mesAnterior(m);
+            if (conDatos.has(m)) previos.push(resumenMes(todos, m, opciones));
+        }
+        const actual = resumenMes(todos, mes, opciones);
+        const anteriorMes = H.mesAnterior(mes);
+        const anterior = conDatos.has(anteriorMes) ? resumenMes(todos, anteriorMes, opciones) : null;
+
+        const fila = (clave, nombre, valorDe) => {
+            const promedio = previos.length ? previos.reduce((t, r) => t + valorDe(r), 0) / previos.length : null;
+            return {
+                clave,
+                nombre,
+                actual: valorDe(actual),
+                anterior: anterior ? valorDe(anterior) : null,
+                promedio,
+                // Fracción respecto del promedio: 0.2 = 20% más que de costumbre.
+                contraPromedio: promedio ? (valorDe(actual) - promedio) / promedio : null,
+            };
+        };
+
+        const filas = H.CATEGORIAS.map(c => fila(c.clave, c.nombre, r => r.porCategoria[c.clave].total));
+        filas.push(fila("hormigas", "Gastos hormiga", r => r.hormigas));
+        filas.push(fila("total", "Total del mes", r => r.total));
+        return { mes, mesesPromedio: previos.length, filas };
+    }
+
+    H.calculos = {
+        resumenMes, semanas, hormigasPorSemana, hormigasQueMasPican, picadurasQueMasDolieron, ordenarMovimientos,
+        mesesConDatos, evolucion, comparacionAnual, comparacionMes,
+    };
 
 })(globalThis.Hormiguero ||= {});

@@ -462,6 +462,190 @@
         boton.textContent = estado.verTodos ? "Ver solo los últimos" : `Ver todos los movimientos (${total})`;
     }
 
+    // ---------- Historial ----------
+
+    let graficoEvolucion = null;
+    let graficoAnual = null;
+    let mesesEvolucion = [];
+
+    function mesCorto(mes) {
+        return H.nombreMes(mes).slice(0, 3) + " " + mes.slice(2, 4);
+    }
+
+    // "↑ 23%" en rojo si subió (en gastos, subir es malo); al revés si
+    // `subirEsBueno` (el ahorro).
+    function variacion(fraccion, subirEsBueno) {
+        if (fraccion == null || !isFinite(fraccion)) return `<span class="tenue">—</span>`;
+        if (Math.abs(fraccion) < 0.005) return `<span class="tenue">igual</span>`;
+        const sube = fraccion > 0;
+        const clase = sube === !!subirEsBueno ? "baja" : "sube";
+        return `<span class="variacion ${clase}">${sube ? "↑" : "↓"} ${H.porcentaje(Math.abs(fraccion), true)}</span>`;
+    }
+
+    function dibujarHistorial() {
+        const opciones = { sinAlacranes: estado.sinAlacranes };
+        const hayHistoria = C.mesesConDatos(estado.gastos).filter(m => m <= estado.mes).length >= 2;
+        $("conEvolucion").hidden = !hayHistoria;
+        $("sinEvolucion").hidden = hayHistoria;
+        $("filaComparaciones").hidden = !hayHistoria;
+        $("subtituloEvolucion").textContent = hayHistoria
+            ? `Hasta ${mesConAnio(estado.mes)}${estado.sinAlacranes ? ", sin alacranes" : ""}. Tocá una barra para ver ese mes.`
+            : "";
+        if (!hayHistoria) return;
+
+        dibujarEvolucion(opciones);
+        dibujarAnual(opciones);
+        dibujarComparacionMes(opciones);
+    }
+
+    function dibujarEvolucion(opciones) {
+        const serie = C.evolucion(estado.gastos, estado.mes, opciones);
+        mesesEvolucion = serie.map(r => r.mes);
+        const elegido = mesesEvolucion.indexOf(estado.mes);
+
+        const capas = H.CATEGORIAS.map(c => ({ nombre: c.nombre, color: c.color, valor: r => r.porCategoria[c.clave].total }));
+        if (serie.some(r => r.porClasificar.total > 0)) {
+            capas.push({ nombre: "Por clasificar", color: COLOR_SIN_CATEGORIA, valor: r => r.porClasificar.total });
+        }
+
+        $("leyendaEvolucion").innerHTML = capas.map(c =>
+            `<span><span class="cuadradito" style="background: ${c.color}"></span>${c.nombre}</span>`).join("");
+
+        // El mes elegido, con color pleno; los demás, un poco transparentes.
+        const datos = {
+            labels: serie.map(r => mesCorto(r.mes)),
+            datasets: capas.map(c => ({
+                label: c.nombre,
+                data: serie.map(c.valor),
+                backgroundColor: serie.map((_, i) => i === elegido ? c.color : c.color + "99"),
+                borderRadius: 4,
+                borderSkipped: false,
+                maxBarThickness: 44,
+            })),
+        };
+
+        if (graficoEvolucion) {
+            graficoEvolucion.data = datos;
+            graficoEvolucion.update();
+            return;
+        }
+
+        graficoEvolucion = new Chart($("graficoEvolucion"), {
+            type: "bar",
+            data: datos,
+            plugins: [totalesArriba],
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 24 } },
+                onClick: (_, elementos) => {
+                    if (!elementos.length) return;
+                    estado.mes = mesesEvolucion[elementos[0].index];
+                    estado.verTodos = false;
+                    dibujar();
+                },
+                onHover: (evento, elementos) => {
+                    evento.native.target.style.cursor = elementos.length ? "pointer" : "default";
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        filter: item => item.parsed.y > 0,
+                        callbacks: {
+                            label: c => ` ${c.dataset.label}: ${H.plata(c.parsed.y)}`,
+                            footer: items => items.length
+                                ? "Total: " + H.plata(items[0].chart.data.datasets.reduce((t, d) => t + d.data[items[0].dataIndex], 0))
+                                : "",
+                        },
+                    },
+                },
+                scales: {
+                    x: { stacked: true, grid: { display: false }, ticks: { color: "#6B5D2E" }, border: { color: "#E6DDB8" } },
+                    y: { stacked: true, display: false, beginAtZero: true },
+                },
+            },
+        });
+    }
+
+    function dibujarAnual(opciones) {
+        const anio = Number(estado.mes.slice(0, 4));
+        const a = C.comparacionAnual(estado.gastos, anio, opciones, mesActual());
+
+        $("tituloAnual").textContent = `${anio} contra ${anio - 1}`;
+        if (a.comparables.length) {
+            const n = a.comparables;
+            const seguidos = n[n.length - 1] - n[0] === n.length - 1;
+            const periodo = n.length === 1 ? `En ${H.MESES[n[0] - 1]}`
+                : seguidos ? `De ${H.MESES[n[0] - 1]} a ${H.MESES[n[n.length - 1] - 1]}`
+                : `En los ${n.length} meses con datos de los dos años`;
+            const cambio = a.acumuladoAnterior ? (a.acumuladoActual - a.acumuladoAnterior) / a.acumuladoAnterior : null;
+            $("resumenAnual").innerHTML = `${periodo}: <b>${H.plataRedonda(a.acumuladoActual)}</b> en ${anio} contra ` +
+                `<b>${H.plataRedonda(a.acumuladoAnterior)}</b> en ${anio - 1} ${variacion(cambio)}`;
+        } else if (a.hayAnterior) {
+            $("resumenAnual").textContent = `Todavía no hay meses terminados con datos en ${anio} y en ${anio - 1} para comparar.`;
+        } else {
+            $("resumenAnual").innerHTML = `En ${anio}: <b>${H.plataRedonda(a.totalActual)}</b>. Sin datos de ${anio - 1} para comparar.`;
+        }
+
+        const colorAnterior = "#CDBF8E", colorActual = "#6E4BEA";
+        $("leyendaAnual").innerHTML =
+            `<span><span class="cuadradito" style="background: ${colorAnterior}"></span>${anio - 1}</span>` +
+            `<span><span class="cuadradito" style="background: ${colorActual}"></span>${anio}</span>`;
+
+        const datos = {
+            labels: H.MESES.map(m => m.slice(0, 3)),
+            datasets: [
+                { label: String(anio - 1), data: a.meses.map(m => m.anterior), backgroundColor: colorAnterior, borderRadius: 4, maxBarThickness: 18 },
+                { label: String(anio), data: a.meses.map(m => m.actual), backgroundColor: colorActual, borderRadius: 4, maxBarThickness: 18 },
+            ],
+        };
+
+        if (graficoAnual) {
+            graficoAnual.data = datos;
+            graficoAnual.update();
+            return;
+        }
+
+        graficoAnual = new Chart($("graficoAnual"), {
+            type: "bar",
+            data: datos,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${H.plata(c.parsed.y)}` } },
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: "#6B5D2E" }, border: { color: "#E6DDB8" } },
+                    y: { display: false, beginAtZero: true },
+                },
+            },
+        });
+    }
+
+    function dibujarComparacionMes(opciones) {
+        const c = C.comparacionMes(estado.gastos, estado.mes, opciones);
+        const nombre = H.nombreMes(estado.mes);
+        $("tituloComparacionMes").textContent = `${nombre.replace(/^./, l => l.toUpperCase())} contra su historia`;
+        $("subtituloComparacionMes").textContent = c.mesesPromedio
+            ? `Promedio de ${c.mesesPromedio === 1 ? "el mes anterior con datos" : `los ${c.mesesPromedio} meses anteriores con datos`} (hasta 12)${estado.sinAlacranes ? ", sin alacranes" : ""}.`
+            : "Todavía no hay meses anteriores para comparar.";
+
+        const celda = valor => valor == null ? `<span class="tenue">—</span>` : H.plataRedonda(valor);
+        $("cuerpoComparacion").innerHTML = c.filas.map(f => {
+            const cat = H.categoria(f.clave);
+            const marca = cat ? `<span class="cuadradito" style="background: ${cat.color}"></span>` : "";
+            const resumen = f.clave === "hormigas" || f.clave === "total";
+            return `<tr class="${resumen ? "resumen" : ""}">` +
+                `<td><span class="nombre-cat">${marca}${f.nombre}</span></td>` +
+                `<td class="monto">${celda(f.actual)}</td>` +
+                `<td class="monto">${celda(f.anterior)}</td>` +
+                `<td class="monto">${celda(f.promedio)}</td>` +
+                `<td class="monto">${variacion(f.contraPromedio, f.clave === "ahorro")}</td></tr>`;
+        }).join("");
+    }
+
     // ---------- Todo junto ----------
 
     function dibujar() {
@@ -495,6 +679,7 @@
         dibujarSemanas(r);
         dibujarReparto(r);
         dibujarListas(r);
+        dibujarHistorial();
         dibujarTarjeta(r);
         dibujarMovimientos(r);
     }

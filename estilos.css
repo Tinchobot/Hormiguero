@@ -607,6 +607,17 @@ tbody tr.clicable:focus-visible { outline: 3px solid #4526B8; outline-offset: -3
 .boton-cat:focus-visible { outline: 3px solid #4526B8; outline-offset: 2px; }
 .boton-cat[aria-pressed="true"] { outline: 3px solid #2B2410; outline-offset: 2px; }
 
+/* ---------- Historial ---------- */
+
+.lienzo-evolucion { position: relative; height: 300px; margin-top: 18px; }
+
+.tabla-comparacion { min-width: 480px; }
+.tabla-comparacion th.monto { text-align: right; }
+.tabla-comparacion td { padding: 9px 6px; }
+.tabla-comparacion .nombre-cat { display: flex; align-items: center; gap: 8px; font-weight: 700; white-space: nowrap; }
+.tabla-comparacion tr.resumen td { border-top: 2px solid rgba(180, 130, 0, 0.45); font-weight: 800; }
+.tabla-comparacion .tenue { color: var(--texto-2); font-weight: 500; }
+
 /* ---------- Píldoras de filtro de movimientos ---------- */
 
 .pildora {

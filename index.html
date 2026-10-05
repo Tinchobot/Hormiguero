@@ -157,6 +157,37 @@
             </section>
         </div>
 
+        <section class="tarjeta" id="bloqueEvolucion" style="margin-top: 20px">
+            <h2>Evolución mensual</h2>
+            <div class="subtitulo" id="subtituloEvolucion"></div>
+            <div id="conEvolucion">
+                <div class="lienzo-evolucion"><canvas id="graficoEvolucion" role="img" aria-label="Gastos de cada mes, por categoría"></canvas></div>
+                <div class="leyenda" id="leyendaEvolucion"></div>
+            </div>
+            <p class="vacio-texto" id="sinEvolucion" hidden>Cuando haya más de un mes cargado, acá vas a ver cómo cambian tus gastos de un mes a otro.</p>
+        </section>
+
+        <div class="dos-columnas" id="filaComparaciones" style="margin-top: 20px">
+            <section class="tarjeta">
+                <h2 id="tituloAnual">Este año contra el anterior</h2>
+                <div class="subtitulo" id="resumenAnual"></div>
+                <div class="lienzo-barras"><canvas id="graficoAnual" role="img" aria-label="Total de cada mes, este año y el anterior"></canvas></div>
+                <div class="leyenda" id="leyendaAnual"></div>
+            </section>
+            <section class="tarjeta">
+                <h2 id="tituloComparacionMes">El mes contra su historia</h2>
+                <div class="subtitulo" id="subtituloComparacionMes"></div>
+                <div class="tabla-contenedor">
+                    <table class="tabla-comparacion">
+                        <thead>
+                            <tr><th>CATEGORÍA</th><th class="monto">ESTE MES</th><th class="monto">MES ANTERIOR</th><th class="monto">PROMEDIO</th><th class="monto">VS. PROMEDIO</th></tr>
+                        </thead>
+                        <tbody id="cuerpoComparacion"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
         <section class="tarjeta" id="bloqueTarjeta" style="margin-top: 20px" hidden>
             <h2>Tarjeta de crédito</h2>
             <div class="subtitulo" id="subtituloTarjeta"></div>
