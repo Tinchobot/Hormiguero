@@ -382,7 +382,7 @@
         const enDolares = deTarjeta.filter(g => g.moneda === "USD");
         const usd = enDolares.reduce((t, g) => t + g.monto, 0);
         $("totalDolares").textContent = H.dolares(usd);
-        const tipo = estado.tipos[r.mes];
+        const tipo = H.cambio.tipo(estado.tipos, r.mes);
         if (!enDolares.length) {
             $("detalleDolares").textContent = "Sin consumos en dólares este mes.";
         } else if (tipo) {
@@ -588,7 +588,7 @@
         for (let i = 0; i < 2; i++) opciones.unshift(H.mesAnterior(opciones[0]));
         for (let i = 0; i < 2; i++) opciones.push(H.mesSiguiente(opciones[opciones.length - 1]));
 
-        const tipo = estado.tipos[d.mesSugerido];
+        const tipo = H.cambio.tipo(estado.tipos, d.mesSugerido);
         const tcInicial = tipo ? tipo.valor : d.tcPago;
         const tcNota = tipo
             ? `Ya cargado (${ORIGEN_CAMBIO[tipo.origen]}).`
@@ -654,7 +654,7 @@
             validacion: resultado.validacion,
         };
         await H.datos.guardarDocumento(documento, gastos);
-        await H.datos.guardarConfig("tiposDeCambio", tipos);
+        tipos = await H.datos.guardarTipos(tipos);
 
         // Si cambió el tipo de cambio de otros meses, recalcular sus dólares.
         const todos = await H.datos.todosLosGastos();
@@ -1168,11 +1168,13 @@
     function abrirAjustes() {
         dibujarAjustes();
         $("confirmarBorrado").hidden = true;
-        $("botonBorrar").textContent = "Borrar todos los datos";
+        $("botonBorrar").textContent = "Borrar los datos de este dispositivo";
         $("dialogoAjustes").showModal();
     }
 
     function dibujarAjustes() {
+        dibujarDrive();
+
         // Tipo de cambio: un renglón por cada mes con consumos en dólares.
         const usdPorMes = {};
         for (const g of estado.gastos) {
@@ -1180,7 +1182,7 @@
         }
         const meses = Object.keys(usdPorMes).sort().reverse();
         $("ajusteCambio").innerHTML = meses.length ? meses.map(m => {
-            const t = estado.tipos[m];
+            const t = H.cambio.tipo(estado.tipos, m);
             return `<div class="fila-ajuste"><span><b>${mesConAnio(m)}</b> · ${H.dolares(usdPorMes[m])}
                 <span class="sub">${t ? ORIGEN_CAMBIO[t.origen] : "sin cargar"}</span></span>
                 <span class="controles"><input class="campo" type="number" min="0" step="0.01" inputmode="decimal" data-cambio="${m}" value="${t ? t.valor : ""}" aria-label="Tipo de cambio de ${mesConAnio(m)}"></span></div>`;
@@ -1220,9 +1222,8 @@
         if (valor > 0) tipos[mes] = { valor, origen: "manual" };
         else delete tipos[mes];
 
-        await H.datos.guardarConfig("tiposDeCambio", tipos);
-        estado.tipos = tipos;
-        const cambiados = H.cambio.recalcular(estado.gastos, mes, H.cambio.valor(tipos, mes));
+        estado.tipos = await H.datos.guardarTipos(tipos);
+        const cambiados = H.cambio.recalcular(estado.gastos, mes, H.cambio.valor(estado.tipos, mes));
         await H.datos.guardarGastos(cambiados);
         reemplazarGastos(cambiados);
         dibujar();
@@ -1262,15 +1263,195 @@
 
     async function borrarDatos() {
         if ($("confirmarBorrado").hidden) {
+            $("textoBorrado").innerHTML = sync.conectado
+                ? "<b>¿Borrar los datos de este dispositivo?</b> Se desconecta Google Drive, pero tus datos siguen ahí: si volvés a conectar, se recuperan. Lo que tengas en Ants no se toca."
+                : "<b>¿Borrar todos los gastos, reglas y resúmenes de este dispositivo?</b> No se puede deshacer (si querés una copia, exportá primero). Lo que tengas en Ants no se toca.";
             $("confirmarBorrado").hidden = false;
-            $("botonBorrar").textContent = "Sí, borrar todo";
+            $("botonBorrar").textContent = "Sí, borrar";
             return;
         }
+        // Desconectar antes, así la sincronización no vuelve a bajar todo.
+        if (sync.conectado) desconectarDrive();
         await H.datos.borrarTodo();
         $("dialogoAjustes").close();
         estado.mes = null;
         await recargar();
-        avisar("Se borraron todos los datos de este dispositivo.");
+        avisar("Se borraron los datos de este dispositivo.");
+    }
+
+    // Un archivo JSON con todo, para tener una copia propia.
+    async function exportar() {
+        const todo = await H.datos.leerParaSincronizar();
+        const sinLapidas = lista => lista.filter(e => !e.borrado);
+        const datos = {
+            formato: "hormiguero-exportacion",
+            version: 1,
+            exportado: new Date().toISOString(),
+            gastos: sinLapidas(todo.gastos),
+            documentos: sinLapidas(todo.documentos),
+            reglas: sinLapidas(todo.reglas),
+            fijos: sinLapidas(todo.fijos),
+            tiposDeCambio: H.sincronizar.elementosATipos(todo.tipos.filter(t => t.valor != null)),
+        };
+        const blob = new Blob([JSON.stringify(datos, null, 2)], { type: "application/json" });
+        const enlace = document.createElement("a");
+        enlace.href = URL.createObjectURL(blob);
+        enlace.download = `hormiguero-${hoyISO()}.json`;
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+        setTimeout(() => URL.revokeObjectURL(enlace.href), 10000);
+        avisar(`Se exportaron ${cantidadGastos(datos.gastos.length)}.`, "ok");
+    }
+
+    // ---------- Google Drive ----------
+
+    const CLAVE_CONECTADO = "hormiguero.drive";
+
+    function leerPreferencia(clave) {
+        try { return localStorage.getItem(clave); } catch (e) { return null; }
+    }
+
+    function guardarPreferencia(clave, valor) {
+        try {
+            if (valor == null) localStorage.removeItem(clave);
+            else localStorage.setItem(clave, valor);
+        } catch (e) { /* sin almacenamiento: solo dura esta sesión */ }
+    }
+
+    const sync = {
+        conectado: leerPreferencia(CLAVE_CONECTADO) === "1",
+        estado: "inactivo",   // inactivo | sincronizando | ok | pendiente | error
+        error: "",
+        ultima: null,         // Date de la última sincronización buena
+        hayCambios: false,    // cambios locales sin subir
+        enCurso: null,        // promesa del ciclo en curso
+        otraVez: false,       // pidieron sincronizar durante un ciclo
+        temporizador: null,
+    };
+
+    function horaCorta(fecha) {
+        return fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function dibujarEstado() {
+        const boton = $("estadoSync");
+        let texto, estadoVisual, titulo = "";
+        if (!H.drive.configurado() || !sync.conectado) {
+            texto = "Guardado en este dispositivo";
+            estadoVisual = "local";
+            titulo = H.drive.configurado() ? "Tocá para conectar con Google Drive" : "";
+        } else if (sync.estado === "sincronizando") {
+            texto = "Sincronizando…";
+            estadoVisual = "sincronizando";
+        } else if (sync.estado === "error") {
+            texto = "No se pudo sincronizar";
+            estadoVisual = "error";
+            titulo = sync.error + " Tocá para reintentar.";
+        } else if (!H.drive.tieneToken() || sync.hayCambios) {
+            texto = sync.hayCambios ? "Cambios sin sincronizar" : "Tocá para sincronizar";
+            estadoVisual = "pendiente";
+            titulo = "Tocá para sincronizar con Google Drive";
+        } else {
+            texto = "Sincronizado con Google Drive";
+            estadoVisual = "ok";
+            titulo = sync.ultima ? "Última vez: " + horaCorta(sync.ultima) : "";
+        }
+        $("estadoTexto").textContent = texto;
+        boton.dataset.estado = estadoVisual;
+        boton.title = titulo;
+        if ($("dialogoAjustes").open) dibujarDrive();
+    }
+
+    function dibujarDrive() {
+        const configurado = H.drive.configurado();
+        let detalle;
+        if (!configurado) detalle = "Falta configurar el ID de cliente de Google en js/config.js.";
+        else if (!sync.conectado) detalle = "No está conectado: los datos quedan solo en este navegador.";
+        else if (sync.estado === "error") detalle = "Último intento: " + sync.error;
+        else if (sync.ultima) detalle = "Conectado. Última sincronización: " + horaCorta(sync.ultima) + ".";
+        else detalle = "Conectado.";
+        $("driveDetalle").textContent = detalle;
+        $("driveConectar").hidden = !configurado || sync.conectado;
+        $("driveSincronizar").hidden = !sync.conectado;
+        $("driveDesconectar").hidden = !sync.conectado;
+    }
+
+    // Sincroniza una vez (o encola otra vuelta si ya hay una en curso).
+    // interactivo: viene de un clic, así que puede abrir la ventana de Google.
+    async function sincronizarAhora(interactivo) {
+        if (!sync.conectado || !H.drive.configurado()) return;
+        if (sync.enCurso) { sync.otraVez = true; return sync.enCurso; }
+
+        sync.enCurso = (async () => {
+            try {
+                if (!H.drive.tieneToken()) {
+                    try {
+                        await H.drive.conectar(interactivo);
+                    } catch (e) {
+                        // Sin clic, el navegador puede no dejar pedir el permiso: queda pendiente.
+                        if (!interactivo) { sync.estado = "pendiente"; return; }
+                        throw e;
+                    }
+                }
+                sync.estado = "sincronizando";
+                dibujarEstado();
+                do {
+                    sync.otraVez = false;
+                    sync.hayCambios = false;
+                    const r = await H.drive.sincronizar();
+                    if (r.recibidos) await recargar();
+                    if (r.ignorados.length) {
+                        avisar(`En la carpeta de Drive hay archivos que no reconozco (${r.ignorados.join(", ")}); no los toqué.`, "error");
+                    }
+                } while (sync.otraVez);
+                sync.estado = "ok";
+                sync.error = "";
+                sync.ultima = new Date();
+            } catch (e) {
+                sync.estado = e.sinPermiso ? "pendiente" : "error";
+                sync.error = e.message || String(e);
+                sync.hayCambios = true;
+            } finally {
+                sync.enCurso = null;
+                dibujarEstado();
+            }
+        })();
+        return sync.enCurso;
+    }
+
+    // Después de un cambio local, sincronizar en unos segundos (si hay
+    // permiso vigente; si no, queda marcado como pendiente).
+    function programarSincronizacion() {
+        if (!sync.conectado) return;
+        sync.hayCambios = true;
+        clearTimeout(sync.temporizador);
+        if (H.drive.tieneToken()) sync.temporizador = setTimeout(() => sincronizarAhora(false), 2500);
+        dibujarEstado();
+    }
+
+    async function conectarDrive() {
+        try {
+            await H.drive.conectar(true);
+        } catch (e) {
+            avisar(e.message || String(e), "error");
+            return;
+        }
+        sync.conectado = true;
+        guardarPreferencia(CLAVE_CONECTADO, "1");
+        sync.hayCambios = true;
+        await sincronizarAhora(true);
+        if (sync.estado === "ok") avisar("Listo: Hormiguero quedó conectado con tu Google Drive.", "ok");
+    }
+
+    function desconectarDrive() {
+        H.drive.desconectar();
+        clearTimeout(sync.temporizador);
+        sync.conectado = false;
+        sync.estado = "inactivo";
+        sync.hayCambios = false;
+        guardarPreferencia(CLAVE_CONECTADO, null);
+        dibujarEstado();
     }
 
     // ---------- Eventos ----------
@@ -1403,6 +1584,25 @@
         });
         $("botonAjustes").addEventListener("click", abrirAjustes);
         $("botonBorrar").addEventListener("click", borrarDatos);
+        $("botonExportar").addEventListener("click", () => exportar().catch(e => avisar("No pude exportar: " + (e.message || e), "error")));
+
+        // Google Drive.
+        $("estadoSync").addEventListener("click", () => {
+            if (sync.conectado) sincronizarAhora(true);
+            else abrirAjustes();
+        });
+        $("driveConectar").addEventListener("click", conectarDrive);
+        $("driveSincronizar").addEventListener("click", () => sincronizarAhora(true));
+        $("driveDesconectar").addEventListener("click", () => {
+            desconectarDrive();
+            avisar("Se desconectó Google Drive. Tus datos siguen en este dispositivo y en Drive.");
+        });
+        H.datos.alCambiar = programarSincronizacion;
+        // Al volver a la pestaña, traer lo que se haya cambiado en otro dispositivo.
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState !== "visible" || !sync.conectado || !H.drive.tieneToken()) return;
+            if (!sync.ultima || Date.now() - sync.ultima > 60000) sincronizarAhora(false);
+        });
     }
 
     // ---------- Arranque ----------
@@ -1413,8 +1613,10 @@
     }
 
     conectar();
+    dibujarEstado();
     recargar().then(() => {
         if (location.hash === "#carga") mostrarVista();
+        if (sync.conectado) sincronizarAhora(false);
     }).catch(e => {
         avisar("No pude abrir el guardado local del navegador: " + (e.message || e), "error");
         $("bienvenida").hidden = false;

@@ -180,14 +180,17 @@ box-shadow:
 
 - Inicio de sesión con **Google Identity Services** desde el navegador. El usuario ve lo mismo en la PC y en el celular.
 - Los datos viven en el **Drive del propio usuario**; cada persona que use Hormiguero tiene sus datos separados.
-- Estructura sugerida (JSON):
+- **Permiso `drive.file`** (decidido): carpeta **visible** "Hormiguero" en el Drive del usuario; Hormiguero solo ve los archivos que crea. Proyecto de Google Cloud **"Hormiguero"**, nuevo; el ID de cliente (aplicación web) va en `js/config.js`. Orígenes autorizados: `https://tinchobot.github.io` y `http://localhost:8642`.
+- Estructura (JSON, cada archivo `{ formato: "hormiguero", version: 1, elementos: [...] }`):
   - `meses/2026-09.json`: gastos del mes.
+  - `documentos.json`: resúmenes de tarjeta importados.
   - `reglas.json`: reglas de clasificación por comercio.
   - `fijos.json`: plantillas de gastos que se repiten.
-  - `config.json`: tipos de cambio y preferencias.
-- Cada gasto lleva `id` único y `actualizado` (fecha y hora) para resolver conflictos entre dispositivos (gana el cambio más reciente por gasto).
+  - `config.json`: tipos de cambio por mes.
+- Cada elemento lleva `id` único y `actualizado` (fecha y hora) para resolver conflictos entre dispositivos (gana el cambio más reciente por elemento). Lo borrado queda como **lápida** `{ id, borrado: true, actualizado, mes }` para que otro dispositivo no lo reviva.
+- El token de Google Identity Services dura una hora y no se puede renovar sin clic en todos los navegadores: si vence, el indicador del encabezado pasa a "Tocá para sincronizar".
 - **Hormiguero guarda su propia copia de cada mes.** Lo que se borre después en Ants (por ejemplo, al limpiar la pantalla) no debe borrar el historial de Hormiguero.
-- **A verificar:** para que Hormiguero pueda leer en el futuro los datos que sincronice Ants, ambas apps probablemente tengan que usar el **mismo proyecto de Google Cloud**, y hay que elegir bien el alcance de permisos de Drive (`drive.appdata` o `drive.file`), porque ambos limitan el acceso a lo que crea la propia app. Confirmarlo antes de diseñar el formato compartido. Preferir siempre el permiso más limitado que funcione.
+- **A verificar en la fase 6:** Ants (Android) tiene que usar el **mismo proyecto de Google Cloud** para que Hormiguero pueda leer sus archivos con `drive.file`. La documentación de Google no lo dice explícitamente; se entiende que Drive identifica a la app por el proyecto, no por cada cliente. Probarlo antes de diseñar el formato compartido.
 
 ---
 

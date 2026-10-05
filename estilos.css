@@ -72,6 +72,10 @@ h2 {
 .encabezado-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 
 .estado {
+    border: 0;
+    font-family: inherit;
+    min-height: 36px;
+    cursor: pointer;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -81,6 +85,21 @@ h2 {
     background: rgba(255, 255, 255, 0.6);
     padding: 8px 14px;
     border-radius: 999px;
+}
+
+.estado:hover { background: rgba(255, 255, 255, 0.8); }
+.estado:focus-visible { outline: 3px solid #4526B8; outline-offset: 2px; }
+.estado-icono { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #B8A970; }
+.estado[data-estado="ok"] .estado-icono { background: #2E7D32; }
+.estado[data-estado="sincronizando"] .estado-icono { background: #1E5AA8; animation: latido 1s ease-in-out infinite; }
+.estado[data-estado="pendiente"] .estado-icono { background: #EF6C00; }
+.estado[data-estado="error"] .estado-icono { background: #C62828; }
+.estado[data-estado="error"] { color: #8E1B1B; }
+
+@keyframes latido { 50% { opacity: 0.35; } }
+
+@media (prefers-reduced-motion: reduce) {
+    .estado[data-estado="sincronizando"] .estado-icono { animation: none; }
 }
 
 /* ---------- Contenedor ---------- */
