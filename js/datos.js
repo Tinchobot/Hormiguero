@@ -1,14 +1,19 @@
 // =====================================
 // Guardado local en IndexedDB.
 //
-// Base "hormiguero", almacén "gastos" (clave: id, índice por mes).
+// Base "hormiguero":
+//   gastos      clave id, índice por mes
+//   documentos  clave id (resúmenes de tarjeta importados)
+//   reglas      clave id (clasificación por comercio)
+//   config      clave "clave" (tipos de cambio, preferencias)
+//
 // En la fase 4 esto pasa a ser la caché de lo que vive en Google Drive.
 // =====================================
 
 (function (H) {
 
     const BASE = "hormiguero";
-    const VERSION = 1;
+    const VERSION = 2;
     let conexion = null;
 
     function abrir() {
@@ -18,9 +23,11 @@
             pedido.onupgradeneeded = () => {
                 const db = pedido.result;
                 if (!db.objectStoreNames.contains("gastos")) {
-                    const gastos = db.createObjectStore("gastos", { keyPath: "id" });
-                    gastos.createIndex("mes", "mes");
+                    db.createObjectStore("gastos", { keyPath: "id" }).createIndex("mes", "mes");
                 }
+                if (!db.objectStoreNames.contains("documentos")) db.createObjectStore("documentos", { keyPath: "id" });
+                if (!db.objectStoreNames.contains("reglas")) db.createObjectStore("reglas", { keyPath: "id" });
+                if (!db.objectStoreNames.contains("config")) db.createObjectStore("config", { keyPath: "clave" });
             };
             pedido.onsuccess = () => resolver(pedido.result);
             pedido.onerror = () => rechazar(pedido.error);
@@ -43,9 +50,26 @@
         });
     }
 
-    async function todosLosGastos() {
+    async function todos(almacen) {
         const db = await abrir();
-        return esperar(db.transaction("gastos").objectStore("gastos").getAll());
+        return esperar(db.transaction(almacen).objectStore(almacen).getAll());
+    }
+
+    // Reemplaza (o crea) cada elemento.
+    async function guardar(almacen, lista) {
+        if (!lista.length) return;
+        const db = await abrir();
+        const tx = db.transaction(almacen, "readwrite");
+        const store = tx.objectStore(almacen);
+        for (const x of lista) store.put(x);
+        await fin(tx);
+    }
+
+    async function borrar(almacen, id) {
+        const db = await abrir();
+        const tx = db.transaction(almacen, "readwrite");
+        tx.objectStore(almacen).delete(id);
+        await fin(tx);
     }
 
     // Agrega los gastos que no existen. Los que ya están (mismo id) no se
@@ -67,13 +91,65 @@
         return { nuevos, repetidos: gastos.length - nuevos };
     }
 
-    async function borrarTodo() {
+    async function existeDocumento(id) {
         const db = await abrir();
-        const tx = db.transaction("gastos", "readwrite");
-        tx.objectStore("gastos").clear();
+        const clave = await esperar(db.transaction("documentos").objectStore("documentos").getKey(id));
+        return clave !== undefined;
+    }
+
+    // Guarda el documento y sus gastos juntos: o entra todo o nada.
+    async function guardarDocumento(documento, gastos) {
+        const db = await abrir();
+        const tx = db.transaction(["documentos", "gastos"], "readwrite");
+        tx.objectStore("documentos").put(documento);
+        const store = tx.objectStore("gastos");
+        for (const g of gastos) store.put(g);
         await fin(tx);
     }
 
-    H.datos = { todosLosGastos, agregarNuevos, borrarTodo };
+    // Saca el documento y todos los gastos que vinieron de él.
+    async function quitarDocumento(id) {
+        const db = await abrir();
+        const tx = db.transaction(["documentos", "gastos"], "readwrite");
+        tx.objectStore("documentos").delete(id);
+        const store = tx.objectStore("gastos");
+        const gastos = await esperar(store.getAll());
+        for (const g of gastos) if (g.documento === id) store.delete(g.id);
+        await fin(tx);
+    }
+
+    async function leerConfig(clave, porDefecto) {
+        const db = await abrir();
+        const fila = await esperar(db.transaction("config").objectStore("config").get(clave));
+        return fila ? fila.valor : porDefecto;
+    }
+
+    async function guardarConfig(clave, valor) {
+        await guardar("config", [{ clave, valor }]);
+    }
+
+    async function borrarTodo() {
+        const db = await abrir();
+        const almacenes = ["gastos", "documentos", "reglas", "config"];
+        const tx = db.transaction(almacenes, "readwrite");
+        for (const a of almacenes) tx.objectStore(a).clear();
+        await fin(tx);
+    }
+
+    H.datos = {
+        todosLosGastos: () => todos("gastos"),
+        todosLosDocumentos: () => todos("documentos"),
+        todasLasReglas: () => todos("reglas"),
+        guardarGastos: lista => guardar("gastos", lista),
+        guardarReglas: lista => guardar("reglas", lista),
+        borrarRegla: id => borrar("reglas", id),
+        agregarNuevos,
+        existeDocumento,
+        guardarDocumento,
+        quitarDocumento,
+        leerConfig,
+        guardarConfig,
+        borrarTodo,
+    };
 
 })(globalThis.Hormiguero ||= {});

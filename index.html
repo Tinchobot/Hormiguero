@@ -39,7 +39,7 @@
     <!-- Sin datos todavía -->
     <section class="tarjeta bienvenida" id="bienvenida" hidden>
         <h2>Todavía no hay gastos</h2>
-        <p>Exportá el Excel desde Ants (botón de exportar en la app) y cargalo acá. Hormiguero lo lee en tu navegador: los datos no salen de este dispositivo.</p>
+        <p>Cargá el Excel que exporta Ants o el resumen de tu Visa Santander en PDF. Hormiguero los lee en tu navegador: los datos no salen de este dispositivo.</p>
         <div class="acciones-carga" style="max-width: 420px; margin: 0 auto">
             <button type="button" class="boton boton-violeta" data-accion="cargar-documento">Cargar documento</button>
         </div>
@@ -57,6 +57,22 @@
                 <span id="meses" class="periodo-grupo"></span>
             </div>
             <label class="casilla"><input type="checkbox" id="sinAlacranes">Ver sin alacranes</label>
+        </section>
+
+        <section class="llamado" id="llamadoClasificar" hidden>
+            <div>
+                <b id="llamadoClasificarTitulo"></b>
+                <div class="llamado-detalle">Elegí la categoría de cada comercio una vez; desde el mes que viene se clasifican solos.</div>
+            </div>
+            <button type="button" class="boton boton-violeta" id="botonClasificar">Clasificar</button>
+        </section>
+
+        <section class="llamado llamado-alerta" id="llamadoCambio" hidden>
+            <div>
+                <b id="llamadoCambioTitulo"></b>
+                <div class="llamado-detalle">Mientras tanto no se suman al total.</div>
+            </div>
+            <button type="button" class="boton" data-accion="ajustes">Cargar tipo de cambio</button>
         </section>
 
         <div class="principales" style="margin-top: 20px">
@@ -129,6 +145,31 @@
             </section>
         </div>
 
+        <section class="tarjeta" id="bloqueTarjeta" style="margin-top: 20px" hidden>
+            <h2>Tarjeta de crédito</h2>
+            <div class="subtitulo" id="subtituloTarjeta"></div>
+            <div class="tarjeta-columnas">
+                <div>
+                    <div class="etiqueta-chica">IMPUESTOS Y PERCEPCIONES</div>
+                    <div class="cat-monto" id="totalImpuestos"></div>
+                    <div class="cat-detalle">Sellos, IIBB, IVA y percepción RG 5617. Casi todo sale de los consumos en dólares. Cuentan como fijos.</div>
+                    <details class="desplegable">
+                        <summary>Ver detalle</summary>
+                        <ul class="lista" id="listaImpuestos"></ul>
+                    </details>
+                </div>
+                <div>
+                    <div class="etiqueta-chica">CONSUMOS EN DÓLARES</div>
+                    <div class="cat-monto" id="totalDolares"></div>
+                    <div class="cat-detalle" id="detalleDolares"></div>
+                </div>
+                <div>
+                    <div class="etiqueta-chica">PRÓXIMAS CUOTAS</div>
+                    <ul class="lista lista-compacta" id="listaCuotas"></ul>
+                </div>
+            </div>
+        </section>
+
         <section class="tarjeta" style="margin-top: 20px">
             <div class="movimientos-cabeza">
                 <h2 id="tituloMovimientos">Últimos movimientos</h2>
@@ -156,17 +197,72 @@
 
 <input type="file" id="archivo" accept=".xlsx,.xls,.csv,.pdf" hidden>
 
+<dialog id="dialogoResumen" aria-labelledby="tituloResumen">
+    <div class="tarjeta">
+        <h2 id="tituloResumen">Resumen Visa Santander</h2>
+        <div id="cuerpoResumen"></div>
+        <div class="dialogo-botones">
+            <button type="button" class="boton" data-cerrar>Cancelar</button>
+            <button type="button" class="boton boton-violeta" id="botonImportarResumen">Importar</button>
+        </div>
+    </div>
+</dialog>
+
+<dialog id="dialogoClasificar" aria-labelledby="tituloClasificar">
+    <div class="tarjeta">
+        <h2 id="tituloClasificar">Por clasificar</h2>
+        <p class="secundario">Elegí a qué categoría va cada comercio. Se guarda una regla y los próximos resúmenes lo clasifican solo. El texto de la regla se puede acortar (por ejemplo, "anthropic" agarra todas las variantes).</p>
+        <div id="listaClasificar" class="lista-clasificar"></div>
+        <div class="dialogo-botones">
+            <button type="button" class="boton" data-cerrar>Listo</button>
+        </div>
+    </div>
+</dialog>
+
+<dialog id="dialogoCategoria" aria-labelledby="tituloCategoria">
+    <div class="tarjeta">
+        <h2 id="tituloCategoria">Cambiar categoría</h2>
+        <div id="cuerpoCategoria"></div>
+        <div class="dialogo-botones">
+            <button type="button" class="boton" data-cerrar>Cancelar</button>
+        </div>
+    </div>
+</dialog>
+
 <dialog id="dialogoAjustes" aria-labelledby="tituloAjustes">
     <div class="tarjeta">
         <h2 id="tituloAjustes">Ajustes</h2>
-        <p class="secundario">La conexión con Google Drive, el tipo de cambio y las reglas por comercio llegan en las próximas fases.</p>
-        <p id="resumenDatos"></p>
-        <div id="confirmarBorrado" hidden>
-            <p><b>¿Borrar todos los gastos de este dispositivo?</b> No se puede deshacer. Lo que tengas en Ants no se toca.</p>
-        </div>
+
+        <section class="ajuste">
+            <h3>Tipo de cambio por mes</h3>
+            <p class="secundario">Pesos por dólar para convertir los consumos en dólares de cada mes. Se completa solo con el tipo de cambio al que pagaste el resumen; si lo cambiás a mano, queda fijo.</p>
+            <div id="ajusteCambio"></div>
+        </section>
+
+        <section class="ajuste">
+            <h3>Reglas por comercio</h3>
+            <div id="ajusteReglas"></div>
+        </section>
+
+        <section class="ajuste">
+            <h3>Resúmenes cargados</h3>
+            <div id="ajusteDocumentos"></div>
+        </section>
+
+        <section class="ajuste">
+            <h3>Datos</h3>
+            <p id="resumenDatos"></p>
+            <p class="secundario">Google Drive llega en la fase 4. Por ahora todo queda en este navegador.</p>
+            <div id="confirmarBorrado" hidden>
+                <p><b>¿Borrar todos los gastos, reglas y resúmenes de este dispositivo?</b> No se puede deshacer. Lo que tengas en Ants no se toca.</p>
+            </div>
+            <div class="dialogo-botones" style="justify-content: flex-start">
+                <button type="button" class="boton boton-peligro" id="botonBorrar">Borrar todos los datos</button>
+            </div>
+        </section>
+
         <div class="dialogo-botones">
-            <button type="button" class="boton boton-peligro" id="botonBorrar">Borrar todos los datos</button>
-            <button type="button" class="boton" id="cerrarAjustes">Cerrar</button>
+            <button type="button" class="boton" data-cerrar>Cerrar</button>
         </div>
     </div>
 </dialog>
@@ -178,7 +274,10 @@
 <script src="js/formato.js"></script>
 <script src="js/calculos.js"></script>
 <script src="js/datos.js"></script>
+<script src="js/reglas.js"></script>
+<script src="js/cambio.js"></script>
 <script src="js/lectores/ants-excel.js"></script>
+<script src="js/lectores/visa-santander.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

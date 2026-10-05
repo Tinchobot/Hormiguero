@@ -1,7 +1,8 @@
 // =====================================
 // Hormiguero — tablero del mes.
 //
-// Se carga después de formato.js, calculos.js, datos.js y los lectores.
+// Se carga después de formato.js, calculos.js, datos.js, reglas.js,
+// cambio.js y los lectores.
 // =====================================
 
 (function (H) {
@@ -10,13 +11,18 @@
     const $ = id => document.getElementById(id);
 
     const MOVIMIENTOS_VISIBLES = 8;
+    const COLOR_SIN_CATEGORIA = "#CFC4A0";
 
     const estado = {
         gastos: [],
+        documentos: [],
+        reglas: [],
+        tipos: {},          // tipos de cambio por mes (ver cambio.js)
         mes: null,          // "2026-09"
         sinAlacranes: false,
         filtro: "todos",    // todos | ants | tarjeta | fijo
         verTodos: false,
+        pendiente: null,    // resumen leído esperando confirmación
     };
 
     let graficoSemanas = null;
@@ -25,7 +31,7 @@
     // ---------- Utilidades ----------
 
     function escapar(texto) {
-        return String(texto).replace(/[&<>"']/g, c => ({
+        return String(texto ?? "").replace(/[&<>"']/g, c => ({
             "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
         }[c]));
     }
@@ -33,6 +39,15 @@
     function mesActual() {
         const hoy = new Date();
         return hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0");
+    }
+
+    function mesConAnio(mes) {
+        return H.nombreMes(mes) + " " + mes.slice(0, 4);
+    }
+
+    // "2026-09-07" → "07/09/2026"
+    function fechaLarga(iso) {
+        return iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4);
     }
 
     function mesesConDatos() {
@@ -45,9 +60,23 @@
 
     function nombreFuente(g) {
         if (g.fuente === "ants") return "Ants";
-        if (g.fuente === "tarjeta") return g.tarjeta || "Tarjeta";
+        if (g.fuente === "tarjeta") return g.esImpuesto ? "Impuesto tarjeta" : (g.tarjeta || "Tarjeta");
         return g.plantillaFija ? "Fijo manual" : "Manual";
     }
+
+    function cantidadGastos(n) {
+        return n === 1 ? "1 gasto" : n + " gastos";
+    }
+
+    function cantidadMovimientos(n) {
+        return n === 1 ? "1 movimiento" : n + " movimientos";
+    }
+
+    const ORIGEN_CAMBIO = {
+        manual: "cargado a mano",
+        pago: "al que pagaste el resumen",
+        sugerido: "sugerido: el último pago conocido",
+    };
 
     let temporizadorAviso = null;
 
@@ -57,7 +86,28 @@
         aviso.className = "aviso" + (tipo ? " " + tipo : "");
         aviso.hidden = false;
         clearTimeout(temporizadorAviso);
-        temporizadorAviso = setTimeout(() => { aviso.hidden = true; }, 6000);
+        temporizadorAviso = setTimeout(() => { aviso.hidden = true; }, 7000);
+    }
+
+    function botonesCategoria(actual) {
+        return `<div class="botones-cat">` + H.CATEGORIAS.map(c =>
+            `<button type="button" class="boton-cat" style="--c: ${c.color}" data-categoria="${c.clave}" aria-pressed="${c.clave === actual}">${c.singular}</button>`
+        ).join("") + `</div>`;
+    }
+
+    // Reemplaza en estado.gastos los que vienen en la lista (por id).
+    function reemplazarGastos(lista) {
+        const porId = new Map(lista.map(g => [g.id, g]));
+        estado.gastos = estado.gastos.map(g => porId.get(g.id) || g);
+    }
+
+    // Vuelve a aplicar las reglas a todos los gastos de tarjeta y guarda
+    // los que cambiaron.
+    async function aplicarReglas() {
+        const cambiados = H.reglas.aplicar(estado.reglas, estado.gastos);
+        await H.datos.guardarGastos(cambiados);
+        reemplazarGastos(cambiados);
+        return cambiados;
     }
 
     // ---------- Selector de período ----------
@@ -81,15 +131,32 @@
         }).join("");
     }
 
+    // ---------- Llamados ----------
+
+    function dibujarLlamados(r) {
+        const pc = r.porClasificar;
+        $("llamadoClasificar").hidden = pc.cantidad === 0;
+        if (pc.cantidad) {
+            $("llamadoClasificarTitulo").textContent =
+                `${pc.cantidad === 1 ? "Hay 1 movimiento" : `Hay ${pc.cantidad} movimientos`} de tarjeta por clasificar (${H.plataRedonda(pc.total)})`;
+        }
+
+        $("llamadoCambio").hidden = r.sinCambio === 0;
+        if (r.sinCambio) {
+            $("llamadoCambioTitulo").textContent =
+                `Falta el tipo de cambio de ${H.nombreMes(r.mes)}: ${r.sinCambio === 1 ? "1 gasto en dólares" : r.sinCambio + " gastos en dólares"} sin convertir`;
+        }
+    }
+
     // ---------- Tarjetas ----------
 
     function dibujarPrincipales(r, anterior) {
-        $("totalHormigas").textContent = H.plata(r.hormigas);
+        $("totalHormigas").textContent = H.plataRedonda(r.hormigas);
         $("detalleHormigas").innerHTML = r.hormigas > 0
-            ? `De eso, <b>${H.plata(r.evitables)} (${H.porcentaje(r.evitables / r.hormigas, true)})</b> se podía evitar`
+            ? `De eso, <b>${H.plataRedonda(r.evitables)} (${H.porcentaje(r.evitables / r.hormigas, true)})</b> se podía evitar`
             : "Sin gastos hormiga este mes";
 
-        $("totalMes").textContent = H.plata(r.total);
+        $("totalMes").textContent = H.plataRedonda(r.total);
         const mesPrevio = H.nombreMes(anterior.mes);
         if (anterior.total > 0) {
             const cambio = (r.total - anterior.total) / anterior.total;
@@ -97,13 +164,13 @@
             const flecha = sube ? "↑" : "↓";
             const clase = cambio === 0 ? "" : (sube ? "sube" : "baja");
             $("detalleMes").innerHTML =
-                `<span class="variacion ${clase}">${flecha} ${H.porcentaje(Math.abs(cambio), true)}</span> contra ${mesPrevio} (${H.plata(anterior.total)})`;
+                `<span class="variacion ${clase}">${flecha} ${H.porcentaje(Math.abs(cambio), true)}</span> contra ${mesPrevio} (${H.plataRedonda(anterior.total)})`;
         } else {
             $("detalleMes").textContent = `Sin datos de ${mesPrevio} para comparar`;
         }
 
         const alacranes = r.porCategoria.alacran;
-        $("totalAlacranes").textContent = H.plata(alacranes.total);
+        $("totalAlacranes").textContent = H.plataRedonda(alacranes.total);
         if (estado.sinAlacranes) {
             $("detalleAlacranes").textContent = "Ocultos: estás viendo el mes sin alacranes";
         } else if (alacranes.cantidad === 0) {
@@ -113,10 +180,6 @@
         }
     }
 
-    function cantidadGastos(n) {
-        return n === 1 ? "1 gasto" : n + " gastos";
-    }
-
     function dibujarCategorias(r) {
         const pc = r.porCategoria;
 
@@ -124,15 +187,17 @@
             const c = H.categoria(clave);
             $("cat-" + clave).innerHTML =
                 `<div class="cat-nombre">${c.nombre.toUpperCase()}</div>` +
-                `<div class="cat-monto">${H.plata(pc[clave].total)}</div>` +
+                `<div class="cat-monto">${H.plataRedonda(pc[clave].total)}</div>` +
                 `<div class="cat-detalle">${detalle}</div>`;
         };
 
-        tarjeta("fijo", pc.fijo.cantidad
+        let detalleFijos = pc.fijo.cantidad
             ? `${H.porcentaje(pc.fijo.total / r.total)} del mes · ${cantidadGastos(pc.fijo.cantidad)}`
-            : "Sin fijos cargados");
+            : "Sin fijos cargados";
+        if (r.impuestos.total > 0) detalleFijos += ` · incluye ${H.plataRedonda(r.impuestos.total)} de impuestos`;
+        tarjeta("fijo", detalleFijos);
 
-        $("tituloGrupoHormiga").textContent = "GASTOS HORMIGA · " + H.plata(r.hormigas);
+        $("tituloGrupoHormiga").textContent = "GASTOS HORMIGA · " + H.plataRedonda(r.hormigas);
         for (const clave of H.HORMIGAS) {
             const { total, cantidad } = pc[clave];
             tarjeta(clave, r.hormigas > 0
@@ -212,21 +277,24 @@
     }
 
     function dibujarReparto(r) {
-        const categorias = H.CATEGORIAS;
+        const filas = H.CATEGORIAS.map(c => ({ nombre: c.nombre, color: c.color, total: r.porCategoria[c.clave].total }));
+        if (r.porClasificar.cantidad) {
+            filas.push({ nombre: "Por clasificar", color: COLOR_SIN_CATEGORIA, total: r.porClasificar.total });
+        }
+
         $("porcentajeHormigas").textContent = H.porcentaje(r.total ? r.hormigas / r.total : 0, true);
 
-        $("repartoLista").innerHTML = categorias.map(c => {
-            const total = r.porCategoria[c.clave].total;
-            return `<div><span class="nombre"><span class="cuadradito" style="background: ${c.color}"></span>${c.nombre}</span>` +
-                `<span><b>${H.porcentaje(r.total ? total / r.total : 0)}</b> · ${H.plata(total)}</span></div>`;
-        }).join("");
+        $("repartoLista").innerHTML = filas.map(f =>
+            `<div><span class="nombre"><span class="cuadradito" style="background: ${f.color}"></span>${f.nombre}</span>` +
+            `<span><b>${H.porcentaje(r.total ? f.total / r.total : 0)}</b> · ${H.plataRedonda(f.total)}</span></div>`
+        ).join("");
 
         const vacio = r.total === 0;
         const datos = {
-            labels: categorias.map(c => c.nombre),
+            labels: filas.map(f => f.nombre),
             datasets: [{
-                data: vacio ? [1] : categorias.map(c => r.porCategoria[c.clave].total),
-                backgroundColor: vacio ? ["#E6DDB8"] : categorias.map(c => c.color),
+                data: vacio ? [1] : filas.map(f => f.total),
+                backgroundColor: vacio ? ["#E6DDB8"] : filas.map(f => f.color),
                 borderColor: "#FFFDF2",
                 borderWidth: 2,
             }],
@@ -273,9 +341,58 @@
                 const c = H.categoria(g.categoria);
                 const colorTexto = g.categoria === "evitable" ? "#B54F00" : c.color;
                 return `<li><span><b>${escapar(g.concepto)}</b> · ${H.diaMes(g.fecha)}</span>` +
-                    `<span class="derecha"><span class="texto-cat" style="color: ${colorTexto}">${c.singular}</span><b>${H.plata(g.montoARS)}</b></span></li>`;
+                    `<span class="derecha"><span class="texto-cat" style="color: ${colorTexto}">${c.singular}</span><b>${H.plata(g.montoARS || 0)}</b></span></li>`;
             }).join("")
             : `<li class="vacio-texto" style="border: 0">Nada evitable ni innecesario este mes. ¡Bien!</li>`;
+    }
+
+    // ---------- Bloque de tarjeta ----------
+
+    function dibujarTarjeta(r) {
+        const deTarjeta = r.gastos.filter(g => g.fuente === "tarjeta");
+        $("bloqueTarjeta").hidden = deTarjeta.length === 0;
+        if (!deTarjeta.length) return;
+
+        const docs = estado.documentos.filter(d => d.mes === r.mes);
+        $("subtituloTarjeta").textContent = docs.length
+            ? docs.map(d => `Resumen Visa que vence el ${fechaLarga(d.vencimiento)}`).join(" · ")
+            : "";
+
+        $("totalImpuestos").textContent = H.plataRedonda(r.impuestos.total);
+        $("listaImpuestos").innerHTML = r.impuestos.gastos.map(g =>
+            `<li><span>${escapar(g.concepto)}</span><b>${H.plata(g.montoARS || 0)}</b></li>`
+        ).join("") || `<li class="vacio-texto" style="border: 0">Sin impuestos este mes.</li>`;
+
+        const enDolares = deTarjeta.filter(g => g.moneda === "USD");
+        const usd = enDolares.reduce((t, g) => t + g.monto, 0);
+        $("totalDolares").textContent = H.dolares(usd);
+        const tipo = estado.tipos[r.mes];
+        if (!enDolares.length) {
+            $("detalleDolares").textContent = "Sin consumos en dólares este mes.";
+        } else if (tipo) {
+            const pesos = enDolares.reduce((t, g) => t + (g.montoARS || 0), 0);
+            $("detalleDolares").textContent =
+                `${cantidadMovimientos(enDolares.length)} a ${H.plata(tipo.valor)} por dólar (${ORIGEN_CAMBIO[tipo.origen]}) = ${H.plata(pesos)}`;
+        } else {
+            $("detalleDolares").textContent = "Falta cargar el tipo de cambio en Ajustes.";
+        }
+
+        const cuotasDelMes = deTarjeta.filter(g => g.cuota);
+        const proximas = docs.flatMap(d => d.proximasCuotas || []);
+        const items = cuotasDelMes.map(g =>
+            `<li><span>${escapar(g.concepto)} <span class="sub">cuota ${g.cuota.numero} de ${g.cuota.total} (este mes)</span></span><b>${H.plata(g.montoARS || 0)}</b></li>`
+        ).concat(proximas.map(p =>
+            `<li><span>Vencimiento de ${mesConAnio(p.mes)}</span><b>${H.plata(p.monto)}</b></li>`
+        ));
+        $("listaCuotas").innerHTML = items.join("") || `<li class="vacio-texto" style="border: 0">Sin cuotas pendientes.</li>`;
+    }
+
+    // ---------- Movimientos ----------
+
+    function celdaMonto(g) {
+        if (g.moneda !== "USD") return H.plata(g.montoARS);
+        if (g.montoARS == null) return `${H.dolares(g.monto)}<small>sin tipo de cambio</small>`;
+        return `${H.plata(g.montoARS)}<small>${H.dolares(g.monto)}</small>`;
     }
 
     function dibujarMovimientos(r) {
@@ -292,11 +409,15 @@
         $("tituloMovimientos").textContent = estado.verTodos ? `Movimientos del mes (${total})` : "Últimos movimientos";
 
         $("cuerpoMovimientos").innerHTML = lista.map(g => {
-            const c = H.categoria(g.categoria);
-            return `<tr><td>${H.diaMes(g.fecha)}</td><td class="concepto">${escapar(g.concepto)}</td>` +
-                `<td>${escapar(nombreFuente(g))}</td>` +
-                `<td><span class="etiqueta etq-${g.categoria}">${c.singular}</span></td>` +
-                `<td class="monto">${H.plata(g.montoARS)}</td></tr>`;
+            const c = g.categoria ? H.categoria(g.categoria) : null;
+            const etiqueta = c
+                ? `<span class="etiqueta etq-${g.categoria}">${c.singular}</span>`
+                : `<span class="etiqueta etq-pendiente">Por clasificar</span>`;
+            const cuota = g.cuota ? `<span class="cuota-tag">${g.cuota.numero} de ${g.cuota.total}</span>` : "";
+            return `<tr class="clicable" tabindex="0" data-gasto="${escapar(g.id)}" title="Cambiar categoría">` +
+                `<td>${H.diaMes(g.fecha)}</td><td class="concepto">${escapar(g.concepto)}${cuota}</td>` +
+                `<td>${escapar(nombreFuente(g))}</td><td>${etiqueta}</td>` +
+                `<td class="monto">${celdaMonto(g)}</td></tr>`;
         }).join("");
 
         $("movimientosVacio").hidden = total > 0;
@@ -323,29 +444,43 @@
         const anterior = C.resumenMes(estado.gastos, H.mesAnterior(estado.mes), opciones);
 
         dibujarPeriodo();
+        dibujarLlamados(r);
         dibujarPrincipales(r, anterior);
         dibujarCategorias(r);
         dibujarSemanas(r);
         dibujarReparto(r);
         dibujarListas(r);
+        dibujarTarjeta(r);
         dibujarMovimientos(r);
     }
 
     async function recargar(mesPreferido) {
-        estado.gastos = await H.datos.todosLosGastos();
+        const [gastos, documentos, reglas, tipos] = await Promise.all([
+            H.datos.todosLosGastos(),
+            H.datos.todosLosDocumentos(),
+            H.datos.todasLasReglas(),
+            H.datos.leerConfig("tiposDeCambio", {}),
+        ]);
+        Object.assign(estado, { gastos, documentos, reglas, tipos });
         estado.mes = mesPreferido || estado.mes || ultimoMesConDatos() || mesActual();
         dibujar();
     }
 
     // ---------- Carga de documentos ----------
 
+    let pdfjs = null;
+
+    async function cargarPdfjs() {
+        if (!pdfjs) {
+            pdfjs = await import(new URL("lib/pdfjs/pdf.min.mjs", document.baseURI).href);
+            pdfjs.GlobalWorkerOptions.workerSrc = new URL("lib/pdfjs/pdf.worker.min.mjs", document.baseURI).href;
+        }
+        return pdfjs;
+    }
+
     async function cargarArchivo(archivo) {
         const nombre = archivo.name.toLowerCase();
-
-        if (nombre.endsWith(".pdf")) {
-            avisar("Los resúmenes de tarjeta en PDF llegan en la fase 2. Por ahora, cargá el Excel de Ants.");
-            return;
-        }
+        if (nombre.endsWith(".pdf")) return cargarPdf(archivo);
 
         let resultado;
         try {
@@ -383,18 +518,315 @@
         await recargar(ultimo);
     }
 
+    async function cargarPdf(archivo) {
+        avisar("Leyendo el resumen…");
+        let resultado;
+        try {
+            const lib = await cargarPdfjs();
+            resultado = await H.lectorVisaSantander.leer(new Uint8Array(await archivo.arrayBuffer()), lib);
+        } catch (e) {
+            avisar("No pude leer el PDF: " + (e.message || e), "error");
+            return;
+        }
+        if (!resultado) {
+            avisar("Por ahora solo se pueden leer resúmenes Visa Santander. Este PDF no parece uno.", "error");
+            return;
+        }
+        $("aviso").hidden = true;
+        estado.pendiente = { resultado, archivo: archivo.name, yaCargado: await H.datos.existeDocumento(resultado.documento.id) };
+        abrirResumen();
+    }
+
+    function abrirResumen() {
+        const { resultado, yaCargado } = estado.pendiente;
+        const d = resultado.documento;
+        const v = resultado.validacion;
+
+        // Mes sugerido y dos para cada lado, por si hay que corregirlo.
+        let opciones = [d.mesSugerido];
+        for (let i = 0; i < 2; i++) opciones.unshift(H.mesAnterior(opciones[0]));
+        let siguiente = d.mesSugerido;
+        for (let i = 0; i < 2; i++) {
+            const [a, m] = siguiente.split("-").map(Number);
+            siguiente = m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, "0")}`;
+            opciones.push(siguiente);
+        }
+
+        const tipo = estado.tipos[d.mesSugerido];
+        const tcInicial = tipo ? tipo.valor : d.tcPago;
+        const tcNota = tipo
+            ? `Ya cargado (${ORIGEN_CAMBIO[tipo.origen]}).`
+            : d.tcPago ? `Sugerido: el tipo de cambio del pago que figura en este resumen.` : "";
+
+        const tarjetas = d.tarjetas.map(t => {
+            const partes = [H.plata(t.subtotal ? t.subtotal.ARS : 0)];
+            if (t.subtotal && t.subtotal.USD) partes.push(H.dolares(t.subtotal.USD));
+            return `<div class="fila-ajuste"><span>Visa terminada en ${t.terminacion}</span><b>${partes.join(" + ")}</b></div>`;
+        }).join("");
+
+        const movimientos = resultado.movimientos.filter(m => !m.esImpuesto).length;
+
+        $("cuerpoResumen").innerHTML = `
+            <div class="datos-resumen">
+                ${yaCargado ? `<div class="validacion mal"><b>Este resumen ya está cargado.</b> Si lo importás de nuevo, se reemplaza (por ejemplo, para cambiarle el mes). Las reglas por comercio se mantienen.</div>` : ""}
+                <div class="fila-ajuste"><span>Vence el ${fechaLarga(d.vencimiento)} · ${cantidadMovimientos(movimientos)}</span>
+                    <label class="controles">Va a <select class="campo" id="mesResumen">${opciones.map(m =>
+                        `<option value="${m}"${m === d.mesSugerido ? " selected" : ""}>${mesConAnio(m)}</option>`).join("")}</select></label></div>
+                ${tarjetas}
+                <div class="fila-ajuste"><span>Impuestos y percepciones (cuentan como fijos)</span><b>${H.plata(d.impuestos.ARS)}</b></div>
+                <div class="fila-ajuste"><span>Total a pagar</span><b>${H.plata(d.total.ARS)}${d.total.USD ? " + " + H.dolares(d.total.USD) : ""}</b></div>
+                ${v.ok
+                    ? `<div class="validacion ok">✓ Los movimientos cierran con los subtotales y con el total del resumen.</div>`
+                    : `<div class="validacion mal"><b>Los números no cierran.</b> Podés importarlo igual, pero revisá el resumen:<ul>${v.problemas.map(p => `<li>${escapar(p)}</li>`).join("")}</ul></div>`}
+                ${d.total.USD || resultado.movimientos.some(m => m.moneda === "USD") ? `
+                <div class="fila-ajuste"><span>Tipo de cambio (pesos por dólar)<span class="sub">${escapar(tcNota)}</span></span>
+                    <input class="campo" type="number" id="tcResumen" min="0" step="0.01" inputmode="decimal" value="${tcInicial || ""}"></div>` : ""}
+            </div>`;
+
+        $("botonImportarResumen").textContent = yaCargado ? "Reemplazar" : "Importar";
+        $("dialogoResumen").showModal();
+    }
+
+    async function importarResumen() {
+        const { resultado, archivo, yaCargado } = estado.pendiente;
+        const d = resultado.documento;
+        const mes = $("mesResumen").value;
+
+        // Tipos de cambio: primero lo que se deduce del pago, después lo
+        // que haya escrito el usuario (si cambió el valor propuesto).
+        let { tipos, cambiados } = H.cambio.alImportar(estado.tipos, mes, d.tcPago);
+        const campo = $("tcResumen");
+        if (campo) {
+            const escrito = Number(campo.value);
+            if (escrito > 0 && escrito !== H.cambio.valor(tipos, mes)) {
+                tipos = { ...tipos, [mes]: { valor: escrito, origen: "manual" } };
+                cambiados.push(mes);
+            }
+        }
+
+        if (yaCargado) await H.datos.quitarDocumento(d.id);
+
+        let gastos = H.lectorVisaSantander.aGastos(resultado, mes, H.cambio.valor(tipos, mes));
+        const clasificados = new Map(H.reglas.aplicar(estado.reglas, gastos).map(g => [g.id, g]));
+        gastos = gastos.map(g => clasificados.get(g.id) || g);
+
+        const documento = {
+            ...d,
+            mes,
+            archivo,
+            importado: new Date().toISOString(),
+            validacion: resultado.validacion,
+        };
+        await H.datos.guardarDocumento(documento, gastos);
+        await H.datos.guardarConfig("tiposDeCambio", tipos);
+
+        // Si cambió el tipo de cambio de otros meses, recalcular sus dólares.
+        const todos = await H.datos.todosLosGastos();
+        for (const m of new Set(cambiados)) {
+            await H.datos.guardarGastos(H.cambio.recalcular(todos, m, H.cambio.valor(tipos, m)));
+        }
+
+        $("dialogoResumen").close();
+        estado.pendiente = null;
+        estado.verTodos = false;
+        await recargar(mes);
+
+        const sinClasificar = gastos.filter(g => !g.categoria).length;
+        const movimientos = gastos.filter(g => !g.esImpuesto).length;
+        avisar(`Se importaron ${cantidadMovimientos(movimientos)} y ${gastos.length - movimientos} impuestos del resumen a ${mesConAnio(mes)}.` +
+            (sinClasificar ? ` ${sinClasificar} quedaron por clasificar.` : ""), "ok");
+
+        if (sinClasificar) abrirClasificar();
+    }
+
+    // ---------- Bandeja "Por clasificar" ----------
+
+    function abrirClasificar() {
+        dibujarClasificar();
+        if (!$("dialogoClasificar").open) $("dialogoClasificar").showModal();
+    }
+
+    function dibujarClasificar() {
+        const grupos = H.reglas.porClasificar(estado.gastos);
+        $("listaClasificar").innerHTML = grupos.length ? grupos.map(gr => {
+            const meses = [...new Set(gr.gastos.map(g => g.mes))].sort().map(H.nombreMes).join(", ");
+            return `<div class="item-clasificar" data-clave="${escapar(gr.clave)}">
+                <div class="cabeza"><b>${escapar(gr.ejemplo)}</b><span>${cantidadMovimientos(gr.gastos.length)} · ${H.plata(gr.total)} · ${meses}</span></div>
+                <label>Regla: si contiene <input class="campo" type="text" value="${escapar(gr.clave)}" aria-label="Texto de la regla para ${escapar(gr.ejemplo)}"></label>
+                ${botonesCategoria(null)}
+            </div>`;
+        }).join("") : `<p class="vacio-texto">No queda nada por clasificar.</p>`;
+    }
+
+    async function clasificarComercio(item, categoria) {
+        const clave = item.dataset.clave;
+        const patron = item.querySelector("input").value.trim() || clave;
+        const regla = H.reglas.nuevaRegla(patron, categoria);
+        if (!regla.patron) return;
+
+        await H.datos.guardarReglas([regla]);
+        estado.reglas = estado.reglas.filter(r => r.id !== regla.id).concat(regla);
+        await aplicarReglas();
+
+        const quedan = H.reglas.porClasificar(estado.gastos);
+        if (quedan.some(gr => gr.clave === clave)) {
+            avisar(`La regla "${regla.patron}" no coincide con "${clave}". Probá con un texto que esté contenido en el nombre.`, "error");
+        }
+
+        dibujar();
+        dibujarClasificar();
+        if (!quedan.length) {
+            $("dialogoClasificar").close();
+            avisar("¡Listo! Todos los movimientos tienen categoría.", "ok");
+        }
+    }
+
+    // ---------- Cambiar la categoría de un gasto ----------
+
+    let gastoEnEdicion = null;
+
+    function abrirCategoria(id) {
+        const g = estado.gastos.find(x => x.id === id);
+        if (!g) return;
+        gastoEnEdicion = g;
+
+        const conRegla = g.fuente === "tarjeta" && !g.esImpuesto;
+        const monto = g.moneda === "USD" ? H.dolares(g.monto) : H.plata(g.monto);
+        $("cuerpoCategoria").innerHTML = `
+            <p><b>${escapar(g.concepto)}</b><br><span class="secundario">${fechaLarga(g.fecha)} · ${escapar(nombreFuente(g))} · ${monto}</span></p>
+            ${conRegla ? `
+            <label class="casilla" style="margin: 0"><input type="checkbox" id="usarRegla"${g.categoria && g.clasificadoPor === "manual" ? "" : " checked"}>
+                Guardar como regla para este comercio</label>
+            <label class="secundario" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px">Si contiene
+                <input class="campo" type="text" id="patronRegla" style="flex: 1 1 160px" value="${escapar(H.reglas.claveComercio(g.concepto))}"></label>` : ""}
+            ${botonesCategoria(g.categoria)}`;
+        $("dialogoCategoria").showModal();
+    }
+
+    async function elegirCategoria(categoria) {
+        const g = gastoEnEdicion;
+        const usarRegla = $("usarRegla") && $("usarRegla").checked;
+
+        if (usarRegla) {
+            const regla = H.reglas.nuevaRegla($("patronRegla").value.trim() || g.concepto, categoria);
+            await H.datos.guardarReglas([regla]);
+            estado.reglas = estado.reglas.filter(r => r.id !== regla.id).concat(regla);
+            // Si el gasto estaba fijado a mano, liberarlo para que lo tome la regla.
+            if (g.clasificadoPor === "manual") {
+                const libre = { ...g, clasificadoPor: null };
+                await H.datos.guardarGastos([libre]);
+                reemplazarGastos([libre]);
+            }
+            await aplicarReglas();
+        }
+
+        const actual = estado.gastos.find(x => x.id === g.id);
+        if (actual.categoria !== categoria) {
+            const editado = { ...actual, categoria, clasificadoPor: "manual", actualizado: new Date().toISOString() };
+            await H.datos.guardarGastos([editado]);
+            reemplazarGastos([editado]);
+        }
+
+        $("dialogoCategoria").close();
+        gastoEnEdicion = null;
+        dibujar();
+    }
+
     // ---------- Ajustes ----------
 
     function abrirAjustes() {
-        const meses = mesesConDatos().size;
-        const n = estado.gastos.length;
-        $("resumenDatos").textContent = n
-            ? `Hay ${cantidadGastos(n)} guardados en este dispositivo, en ${meses === 1 ? "1 mes" : meses + " meses"}.`
-            : "No hay gastos guardados en este dispositivo.";
+        dibujarAjustes();
         $("confirmarBorrado").hidden = true;
         $("botonBorrar").textContent = "Borrar todos los datos";
-        $("botonBorrar").disabled = n === 0;
         $("dialogoAjustes").showModal();
+    }
+
+    function dibujarAjustes() {
+        // Tipo de cambio: un renglón por cada mes con consumos en dólares.
+        const usdPorMes = {};
+        for (const g of estado.gastos) {
+            if (g.moneda === "USD") usdPorMes[g.mes] = (usdPorMes[g.mes] || 0) + g.monto;
+        }
+        const meses = Object.keys(usdPorMes).sort().reverse();
+        $("ajusteCambio").innerHTML = meses.length ? meses.map(m => {
+            const t = estado.tipos[m];
+            return `<div class="fila-ajuste"><span><b>${mesConAnio(m)}</b> · ${H.dolares(usdPorMes[m])}
+                <span class="sub">${t ? ORIGEN_CAMBIO[t.origen] : "sin cargar"}</span></span>
+                <span class="controles"><input class="campo" type="number" min="0" step="0.01" inputmode="decimal" data-cambio="${m}" value="${t ? t.valor : ""}" aria-label="Tipo de cambio de ${mesConAnio(m)}"></span></div>`;
+        }).join("") : `<p class="vacio-texto" style="margin: 0">No hay consumos en dólares cargados.</p>`;
+
+        // Reglas.
+        const reglas = [...estado.reglas].sort((a, b) => a.patron.localeCompare(b.patron));
+        $("ajusteReglas").innerHTML = reglas.length ? reglas.map(r =>
+            `<div class="fila-ajuste"><span>Si contiene <b>${escapar(r.patron)}</b></span>
+                <span class="controles">
+                    <select class="campo" data-regla="${escapar(r.id)}" aria-label="Categoría para ${escapar(r.patron)}">${H.CATEGORIAS.map(c =>
+                        `<option value="${c.clave}"${c.clave === r.categoria ? " selected" : ""}>${c.singular}</option>`).join("")}</select>
+                    <button type="button" class="boton boton-chico" data-quitar-regla="${escapar(r.id)}">Quitar</button>
+                </span></div>`
+        ).join("") : `<p class="vacio-texto" style="margin: 0">Todavía no hay reglas. Se crean al clasificar movimientos de tarjeta.</p>`;
+
+        // Documentos.
+        const docs = [...estado.documentos].sort((a, b) => b.vencimiento.localeCompare(a.vencimiento));
+        $("ajusteDocumentos").innerHTML = docs.length ? docs.map(d => {
+            const n = estado.gastos.filter(g => g.documento === d.id).length;
+            return `<div class="fila-ajuste"><span>Visa Santander · vence ${fechaLarga(d.vencimiento)}
+                <span class="sub">${mesConAnio(d.mes)} · ${cantidadGastos(n)}${d.validacion && !d.validacion.ok ? " · los números no cerraban" : ""}</span></span>
+                <button type="button" class="boton boton-chico" data-quitar-documento="${escapar(d.id)}">Quitar</button></div>`;
+        }).join("") : `<p class="vacio-texto" style="margin: 0">Ningún resumen cargado.</p>`;
+
+        const n = estado.gastos.length;
+        const cantMeses = mesesConDatos().size;
+        $("resumenDatos").textContent = n
+            ? `Hay ${cantidadGastos(n)} guardados en este dispositivo, en ${cantMeses === 1 ? "1 mes" : cantMeses + " meses"}.`
+            : "No hay gastos guardados en este dispositivo.";
+        $("botonBorrar").disabled = n === 0 && !estado.reglas.length;
+    }
+
+    async function cambiarTipoDeCambio(mes, texto) {
+        const valor = Number(texto);
+        const tipos = { ...estado.tipos };
+        if (valor > 0) tipos[mes] = { valor, origen: "manual" };
+        else delete tipos[mes];
+
+        await H.datos.guardarConfig("tiposDeCambio", tipos);
+        estado.tipos = tipos;
+        const cambiados = H.cambio.recalcular(estado.gastos, mes, H.cambio.valor(tipos, mes));
+        await H.datos.guardarGastos(cambiados);
+        reemplazarGastos(cambiados);
+        dibujar();
+        dibujarAjustes();
+    }
+
+    async function cambiarRegla(id, categoria) {
+        const regla = estado.reglas.find(r => r.id === id);
+        const editada = { ...regla, categoria, actualizado: new Date().toISOString() };
+        await H.datos.guardarReglas([editada]);
+        estado.reglas = estado.reglas.map(r => r.id === id ? editada : r);
+        await aplicarReglas();
+        dibujar();
+        dibujarAjustes();
+    }
+
+    async function quitarRegla(id) {
+        await H.datos.borrarRegla(id);
+        estado.reglas = estado.reglas.filter(r => r.id !== id);
+        await aplicarReglas();
+        dibujar();
+        dibujarAjustes();
+    }
+
+    async function quitarDocumento(boton) {
+        if (boton.dataset.confirmar !== "si") {
+            boton.dataset.confirmar = "si";
+            boton.textContent = "¿Seguro? Quitar";
+            boton.classList.add("boton-peligro");
+            return;
+        }
+        await H.datos.quitarDocumento(boton.dataset.quitarDocumento);
+        await recargar();
+        dibujarAjustes();
+        avisar("Se quitó el resumen y sus movimientos. Lo podés volver a cargar cuando quieras.");
     }
 
     async function borrarDatos() {
@@ -407,7 +839,7 @@
         $("dialogoAjustes").close();
         estado.mes = null;
         await recargar();
-        avisar("Se borraron todos los gastos de este dispositivo.");
+        avisar("Se borraron todos los datos de este dispositivo.");
     }
 
     // ---------- Eventos ----------
@@ -415,10 +847,19 @@
     function conectar() {
         document.addEventListener("click", e => {
             const boton = e.target.closest("button");
-            if (!boton) return;
+
+            if (!boton) {
+                const fila = e.target.closest("tr[data-gasto]");
+                if (fila) abrirCategoria(fila.dataset.gasto);
+                return;
+            }
 
             if (boton.dataset.accion === "cargar-documento") {
                 $("archivo").click();
+            } else if (boton.dataset.accion === "ajustes") {
+                abrirAjustes();
+            } else if (boton.hasAttribute("data-cerrar")) {
+                boton.closest("dialog").close();
             } else if (boton.dataset.mes) {
                 estado.mes = boton.dataset.mes;
                 estado.verTodos = false;
@@ -434,7 +875,29 @@
             } else if (boton.dataset.filtro) {
                 estado.filtro = boton.dataset.filtro;
                 dibujar();
+            } else if (boton.dataset.categoria) {
+                const item = boton.closest(".item-clasificar");
+                if (item) clasificarComercio(item, boton.dataset.categoria);
+                else if (gastoEnEdicion) elegirCategoria(boton.dataset.categoria);
+            } else if (boton.dataset.quitarRegla) {
+                quitarRegla(boton.dataset.quitarRegla);
+            } else if (boton.dataset.quitarDocumento) {
+                quitarDocumento(boton);
             }
+        });
+
+        // Enter o espacio sobre una fila de movimientos.
+        $("cuerpoMovimientos").addEventListener("keydown", e => {
+            const fila = e.target.closest("tr[data-gasto]");
+            if (fila && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                abrirCategoria(fila.dataset.gasto);
+            }
+        });
+
+        $("dialogoAjustes").addEventListener("change", e => {
+            if (e.target.dataset.cambio) cambiarTipoDeCambio(e.target.dataset.cambio, e.target.value);
+            else if (e.target.dataset.regla) cambiarRegla(e.target.dataset.regla, e.target.value);
         });
 
         $("archivo").addEventListener("change", async e => {
@@ -457,8 +920,11 @@
             avisar("La carga manual (fijos, alacranes, gastos sueltos) llega en la fase 3.");
         });
 
+        $("botonClasificar").addEventListener("click", abrirClasificar);
+        $("botonImportarResumen").addEventListener("click", () => {
+            importarResumen().catch(e => avisar("No pude importar el resumen: " + (e.message || e), "error"));
+        });
         $("botonAjustes").addEventListener("click", abrirAjustes);
-        $("cerrarAjustes").addEventListener("click", () => $("dialogoAjustes").close());
         $("botonBorrar").addEventListener("click", borrarDatos);
     }
 

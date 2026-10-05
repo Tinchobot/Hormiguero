@@ -4,5 +4,8 @@
   "description": "Tablero web de gastos personales mensuales.",
   "scripts": {
     "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "4.10.38"
   }
 }

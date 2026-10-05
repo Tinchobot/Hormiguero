@@ -36,6 +36,24 @@
         return (redondo < 0 ? "-$" : "$") + texto;
     }
 
+    // Para los números grandes del tablero: sin centavos.
+    function plataRedonda(monto) {
+        return plata(Math.round(monto));
+    }
+
+    // U$S 20,00 — siempre con centavos.
+    function dolares(monto) {
+        const texto = Math.abs(monto).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return (monto < 0 ? "-U$S " : "U$S ") + texto;
+    }
+
+    // Monto en pesos según la moneda. Sin tipo de cambio, un monto en
+    // dólares queda en null (se avisa en el tablero que falta cargarlo).
+    function aPesos(monto, moneda, tc) {
+        if (moneda !== "USD") return monto;
+        return tc ? Math.round(monto * tc * 100) / 100 : null;
+    }
+
     // Versión corta para etiquetas de gráficos: $224 mil, $1,06 mill.
     function plataCorta(monto) {
         if (monto >= 1e6) {
@@ -101,6 +119,9 @@
     H.categoria = categoria;
     H.plata = plata;
     H.plataCorta = plataCorta;
+    H.plataRedonda = plataRedonda;
+    H.dolares = dolares;
+    H.aPesos = aPesos;
     H.porcentaje = porcentaje;
     H.diaMes = diaMes;
     H.nombreMes = nombreMes;

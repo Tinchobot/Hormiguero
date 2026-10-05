@@ -4,8 +4,9 @@
 
 (function (H) {
 
+    // montoARS es null en gastos en dólares sin tipo de cambio: cuentan 0.
     function sumar(gastos) {
-        return gastos.reduce((t, g) => t + g.montoARS, 0);
+        return gastos.reduce((t, g) => t + (g.montoARS || 0), 0);
     }
 
     // Totales y cantidades del mes por categoría.
@@ -24,7 +25,17 @@
         const evitables = porCategoria.evitable.total + porCategoria.innecesario.total;
         const total = sumar(gastos);
 
-        return { mes, gastos, porCategoria, hormigas, evitables, total };
+        // Movimientos de tarjeta que todavía no tienen categoría: suman al
+        // total del mes pero no a ninguna categoría.
+        const sinCategoria = gastos.filter(g => !g.categoria);
+        const porClasificar = { total: sumar(sinCategoria), cantidad: sinCategoria.length };
+
+        const deImpuestos = gastos.filter(g => g.esImpuesto);
+        const impuestos = { total: sumar(deImpuestos), cantidad: deImpuestos.length, gastos: deImpuestos };
+
+        const sinCambio = gastos.filter(g => g.montoARS == null).length;
+
+        return { mes, gastos, porCategoria, hormigas, evitables, total, porClasificar, impuestos, sinCambio };
     }
 
     // Semanas fijas del mes: 1–7, 8–14, 15–21, 22–28, 29–fin.
@@ -38,13 +49,23 @@
         return lista;
     }
 
+    // Día del mes en que cae el gasto. Los de tarjeta pueden tener fecha
+    // del mes anterior (el resumen corta a fin de mes) o, si es una cuota,
+    // de hace mucho: los de antes van a la primera semana y los de después
+    // a la última, así las barras suman lo mismo que las tarjetas.
+    function diaEnMes(g, mes) {
+        if (g.fecha.slice(0, 7) < mes) return 1;
+        if (g.fecha.slice(0, 7) > mes) return H.diasDelMes(mes);
+        return Number(g.fecha.slice(8, 10));
+    }
+
     // Por semana, el total de cada categoría hormiga.
     function hormigasPorSemana(gastos, mes) {
         return semanas(mes).map(s => {
             const fila = { ...s };
             for (const c of H.HORMIGAS) {
                 fila[c] = sumar(gastos.filter(g => {
-                    const dia = Number(g.fecha.slice(8, 10));
+                    const dia = diaEnMes(g, mes);
                     return g.categoria === c && dia >= s.desde && dia <= s.hasta;
                 }));
             }
@@ -80,13 +101,18 @@
     function picadurasQueMasDolieron(gastos, cuantas = 5) {
         return gastos
             .filter(g => g.categoria === "evitable" || g.categoria === "innecesario")
-            .sort((a, b) => b.montoARS - a.montoARS)
+            .sort((a, b) => (b.montoARS || 0) - (a.montoARS || 0))
             .slice(0, cuantas);
     }
 
-    // Más recientes primero; a igual fecha, el más caro arriba.
+    // Más recientes primero; a igual fecha, el más caro arriba. Los
+    // impuestos de tarjeta van al final: llevan la fecha de cierre (que
+    // suele ser del mes siguiente) y ya tienen su propio bloque.
     function ordenarMovimientos(gastos) {
-        return [...gastos].sort((a, b) => b.fecha.localeCompare(a.fecha) || b.montoARS - a.montoARS);
+        return [...gastos].sort((a, b) =>
+            (a.esImpuesto ? 1 : 0) - (b.esImpuesto ? 1 : 0) ||
+            b.fecha.localeCompare(a.fecha) ||
+            (b.montoARS || 0) - (a.montoARS || 0));
     }
 
     H.calculos = { resumenMes, semanas, hormigasPorSemana, hormigasQueMasPican, picadurasQueMasDolieron, ordenarMovimientos };

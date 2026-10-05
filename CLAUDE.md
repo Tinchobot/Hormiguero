@@ -230,5 +230,8 @@ box-shadow:
 
 - Formato del resumen de tarjeta en **Excel** (todavía no hay muestra).
 - Si otros bancos se van a soportar más adelante.
-- Categoría por defecto de **impuestos y percepciones** (se muestran aparte, pero falta definir si cuentan como fijo o como otra categoría).
-- Fuente del **tipo de cambio** (manual por ahora; se podría sugerir el que aparece en el pago del resumen).
+
+## Decisiones tomadas
+
+- **Impuestos y percepciones** cuentan como **fijos** (y se muestran aparte en el bloque "Tarjeta de crédito").
+- **Tipo de cambio:** se toma del "Su pago en pesos … tcNNNN" de cada resumen, que es el cambio al que se pagaron los dólares del resumen anterior (origen `pago`). Mientras no llega el resumen siguiente, el mes usa el último pago conocido (origen `sugerido`). Lo que el usuario carga a mano en Ajustes (origen `manual`) nunca se pisa.
