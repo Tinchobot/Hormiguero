@@ -522,6 +522,8 @@ dialog::backdrop { background: rgba(43, 36, 16, 0.45); }
 
 dialog .tarjeta { display: flex; flex-direction: column; gap: 14px; }
 dialog p { margin: 0; line-height: 1.5; }
+.fila-nombre { display: flex; gap: 10px; align-items: center; }
+.fila-nombre .campo { flex: 1; min-width: 0; }
 .dialogo-botones { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
 
 /* ---------- Llamados (por clasificar, falta tipo de cambio) ---------- */

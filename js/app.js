@@ -1426,9 +1426,10 @@
     async function cambiarNombre(texto) {
         const nombre = texto.trim().replace(/\s+/g, " ");
         if (nombre === estado.nombre) return;
+        estado.nombre = nombre; // antes de esperar: Guardar y salir del campo no lo guardan dos veces
         await H.datos.guardarNombre(nombre);
-        estado.nombre = nombre;
         dibujar();
+        avisar(nombre ? `Listo: ahora es ${tituloApp()}.` : "Listo: vuelve a decir Hormiguero.", "ok");
     }
 
     async function cambiarTipoDeCambio(mes, texto) {
@@ -1741,6 +1742,12 @@
                 e.preventDefault();
                 abrirCategoria(fila.dataset.gasto);
             }
+        });
+
+        $("formNombre").addEventListener("submit", e => {
+            e.preventDefault();
+            $("campoNombre").blur();
+            cambiarNombre($("campoNombre").value);
         });
 
         $("dialogoAjustes").addEventListener("change", e => {

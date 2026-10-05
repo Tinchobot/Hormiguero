@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="estilos.css">
+<link rel="stylesheet" href="estilos.css?v=2">
 </head>
 <body>
 
@@ -350,7 +350,10 @@
         <section class="ajuste">
             <h3>Tu nombre</h3>
             <p class="secundario">Para el título: “El Hormiguero de …”. Si lo dejás vacío, dice “Hormiguero”.</p>
-            <input class="campo" type="text" id="campoNombre" placeholder="Ej.: Tincho" maxlength="30" autocomplete="given-name" aria-label="Tu nombre">
+            <form class="fila-nombre" id="formNombre">
+                <input class="campo" type="text" id="campoNombre" placeholder="Ej.: Tincho" maxlength="30" autocomplete="given-name" enterkeyhint="done" aria-label="Tu nombre">
+                <button type="submit" class="boton boton-violeta">Guardar</button>
+            </form>
         </section>
 
         <section class="ajuste">
@@ -402,17 +405,17 @@
 
 <script src="lib/xlsx.full.min.js"></script>
 <script src="lib/chart.umd.min.js"></script>
-<script src="js/config.js"></script>
-<script src="js/formato.js"></script>
-<script src="js/calculos.js"></script>
-<script src="js/sincronizar.js"></script>
-<script src="js/datos.js"></script>
-<script src="js/drive.js"></script>
-<script src="js/reglas.js"></script>
-<script src="js/cambio.js"></script>
-<script src="js/fijos.js"></script>
-<script src="js/lectores/ants-excel.js"></script>
-<script src="js/lectores/visa-santander.js"></script>
-<script src="js/app.js"></script>
+<script src="js/config.js?v=2"></script>
+<script src="js/formato.js?v=2"></script>
+<script src="js/calculos.js?v=2"></script>
+<script src="js/sincronizar.js?v=2"></script>
+<script src="js/datos.js?v=2"></script>
+<script src="js/drive.js?v=2"></script>
+<script src="js/reglas.js?v=2"></script>
+<script src="js/cambio.js?v=2"></script>
+<script src="js/fijos.js?v=2"></script>
+<script src="js/lectores/ants-excel.js?v=2"></script>
+<script src="js/lectores/visa-santander.js?v=2"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>
