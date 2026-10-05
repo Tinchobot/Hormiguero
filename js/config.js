@@ -10,5 +10,5 @@
 
 globalThis.Hormiguero ||= {};
 globalThis.Hormiguero.config = {
-    googleClientId: "",
+    googleClientId: "735170492887-8si9uuaa87v3jf70dj8e528itf5ce81j.apps.googleusercontent.com",
 };
