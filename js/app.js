@@ -2,7 +2,9 @@
 // Hormiguero — tablero del mes.
 //
 // Se carga después de formato.js, calculos.js, datos.js, reglas.js,
-// cambio.js y los lectores.
+// cambio.js, fijos.js y los lectores.
+//
+// Dos vistas en la misma página: el tablero y la carga manual (#carga).
 // =====================================
 
 (function (H) {
@@ -17,7 +19,9 @@
         gastos: [],
         documentos: [],
         reglas: [],
+        fijos: [],          // plantillas de gastos que se repiten (ver fijos.js)
         tipos: {},          // tipos de cambio por mes (ver cambio.js)
+        vista: "tablero",   // tablero | carga
         mes: null,          // "2026-09"
         sinAlacranes: false,
         filtro: "todos",    // todos | ants | tarjeta | fijo
@@ -89,10 +93,15 @@
         temporizadorAviso = setTimeout(() => { aviso.hidden = true; }, 7000);
     }
 
-    function botonesCategoria(actual) {
-        return `<div class="botones-cat">` + H.CATEGORIAS.map(c =>
-            `<button type="button" class="boton-cat" style="--c: ${c.color}" data-categoria="${c.clave}" aria-pressed="${c.clave === actual}">${c.singular}</button>`
-        ).join("") + `</div>`;
+    function botonesCategoria(actual, sinContenedor) {
+        const botones = H.CATEGORIAS.map(c =>
+            `<button type="button" class="boton-cat" data-categoria="${c.clave}" aria-pressed="${c.clave === actual}">${c.singular}</button>`
+        ).join("");
+        return sinContenedor ? botones : `<div class="botones-cat">${botones}</div>`;
+    }
+
+    function montoConMoneda(monto, moneda) {
+        return moneda === "USD" ? H.dolares(monto) : H.plata(monto);
     }
 
     // Reemplaza en estado.gastos los que vienen en la lista (por id).
@@ -139,6 +148,13 @@
         if (pc.cantidad) {
             $("llamadoClasificarTitulo").textContent =
                 `${pc.cantidad === 1 ? "Hay 1 movimiento" : `Hay ${pc.cantidad} movimientos`} de tarjeta por clasificar (${H.plataRedonda(pc.total)})`;
+        }
+
+        const pend = r.pendientes;
+        $("llamadoPendientes").hidden = pend.cantidad === 0;
+        if (pend.cantidad) {
+            $("llamadoPendientesTitulo").textContent =
+                `${pend.cantidad === 1 ? "Hay 1 fijo" : `Hay ${pend.cantidad} fijos`} de ${H.nombreMes(r.mes)} para confirmar (${H.plataRedonda(pend.total)})`;
         }
 
         $("llamadoCambio").hidden = r.sinCambio === 0;
@@ -414,9 +430,10 @@
                 ? `<span class="etiqueta etq-${g.categoria}">${c.singular}</span>`
                 : `<span class="etiqueta etq-pendiente">Por clasificar</span>`;
             const cuota = g.cuota ? `<span class="cuota-tag">${g.cuota.numero} de ${g.cuota.total}</span>` : "";
+            const aConfirmar = g.pendiente ? `<span class="etiqueta etq-aconfirmar">a confirmar</span>` : "";
             return `<tr class="clicable" tabindex="0" data-gasto="${escapar(g.id)}" title="Cambiar categoría">` +
                 `<td>${H.diaMes(g.fecha)}</td><td class="concepto">${escapar(g.concepto)}${cuota}</td>` +
-                `<td>${escapar(nombreFuente(g))}</td><td>${etiqueta}</td>` +
+                `<td>${escapar(nombreFuente(g))}</td><td>${etiqueta}${aConfirmar}</td>` +
                 `<td class="monto">${celdaMonto(g)}</td></tr>`;
         }).join("");
 
@@ -434,6 +451,20 @@
     // ---------- Todo junto ----------
 
     function dibujar() {
+        const enCarga = estado.vista === "carga";
+        $("tituloPagina").textContent = enCarga ? "Carga manual" : "Hormiguero";
+        $("subtituloPagina").textContent = enCarga ? "Fijos, gastos sueltos y alacranes" : "Tus gastos del mes, todos juntos";
+        $("accionesCarga").hidden = !enCarga;
+        $("accionesTablero").hidden = enCarga;
+        $("vistaCarga").hidden = !enCarga;
+
+        if (enCarga) {
+            $("bienvenida").hidden = true;
+            $("tablero").hidden = true;
+            dibujarCarga();
+            return;
+        }
+
         const hayDatos = estado.gastos.length > 0;
         $("bienvenida").hidden = hayDatos;
         $("tablero").hidden = !hayDatos;
@@ -455,15 +486,25 @@
     }
 
     async function recargar(mesPreferido) {
-        const [gastos, documentos, reglas, tipos] = await Promise.all([
+        const [gastos, documentos, reglas, fijos, tipos] = await Promise.all([
             H.datos.todosLosGastos(),
             H.datos.todosLosDocumentos(),
             H.datos.todasLasReglas(),
+            H.datos.todosLosFijos(),
             H.datos.leerConfig("tiposDeCambio", {}),
         ]);
-        Object.assign(estado, { gastos, documentos, reglas, tipos });
+        Object.assign(estado, { gastos, documentos, reglas, fijos, tipos });
+        await copiarFijos();
         estado.mes = mesPreferido || estado.mes || ultimoMesConDatos() || mesActual();
         dibujar();
+    }
+
+    // Crea las copias de los fijos que falten hasta el mes actual.
+    async function copiarFijos() {
+        const nuevas = H.fijos.copiasQueFaltan(estado.fijos, estado.gastos, mesActual(), estado.tipos);
+        if (!nuevas.length) return;
+        await H.datos.guardarGastos(nuevas);
+        estado.gastos = estado.gastos.concat(nuevas);
     }
 
     // ---------- Carga de documentos ----------
@@ -545,12 +586,7 @@
         // Mes sugerido y dos para cada lado, por si hay que corregirlo.
         let opciones = [d.mesSugerido];
         for (let i = 0; i < 2; i++) opciones.unshift(H.mesAnterior(opciones[0]));
-        let siguiente = d.mesSugerido;
-        for (let i = 0; i < 2; i++) {
-            const [a, m] = siguiente.split("-").map(Number);
-            siguiente = m === 12 ? `${a + 1}-01` : `${a}-${String(m + 1).padStart(2, "0")}`;
-            opciones.push(siguiente);
-        }
+        for (let i = 0; i < 2; i++) opciones.push(H.mesSiguiente(opciones[opciones.length - 1]));
 
         const tipo = estado.tipos[d.mesSugerido];
         const tcInicial = tipo ? tipo.valor : d.tcPago;
@@ -699,7 +735,12 @@
                 Guardar como regla para este comercio</label>
             <label class="secundario" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px">Si contiene
                 <input class="campo" type="text" id="patronRegla" style="flex: 1 1 160px" value="${escapar(H.reglas.claveComercio(g.concepto))}"></label>` : ""}
-            ${botonesCategoria(g.categoria)}`;
+            ${botonesCategoria(g.categoria)}
+            ${g.fuente === "manual" ? `
+            <div class="dialogo-botones" style="justify-content: flex-start">
+                <button type="button" class="boton boton-chico" data-editar-gasto="${escapar(g.id)}">Editar</button>
+                <button type="button" class="boton boton-chico" data-borrar-gasto="${escapar(g.id)}">${g.plantillaFija ? "No se paga este mes" : "Borrar"}</button>
+            </div>` : ""}`;
         $("dialogoCategoria").showModal();
     }
 
@@ -730,6 +771,396 @@
         $("dialogoCategoria").close();
         gastoEnEdicion = null;
         dibujar();
+    }
+
+    // ---------- Carga manual ----------
+
+    // Lo que está cargado en el formulario.
+    const form = {
+        modo: "nuevo",       // nuevo | gasto (editar un gasto) | fijo (editar una plantilla)
+        id: null,            // id del gasto o de la plantilla que se edita
+        moneda: "ARS",
+        categoria: null,
+        repetirTocado: false,
+    };
+
+    // 560000 → "560.000" · 1500.5 → "1.500,50" (lo que entiende leerMonto)
+    function montoEditable(monto) {
+        return H.plata(monto).replace("$", "");
+    }
+
+    function hoyISO() {
+        const hoy = new Date();
+        return hoy.getFullYear() + "-" + String(hoy.getMonth() + 1).padStart(2, "0") + "-" + String(hoy.getDate()).padStart(2, "0");
+    }
+
+    // Hoy si se está mirando el mes actual; si no, el primero del mes.
+    function fechaPorDefecto() {
+        const hoy = hoyISO();
+        return hoy.slice(0, 7) === estado.mes ? hoy : estado.mes + "-01";
+    }
+
+    function elegirMoneda(moneda) {
+        form.moneda = moneda;
+        for (const b of document.querySelectorAll("[data-moneda]")) {
+            b.setAttribute("aria-pressed", String(b.dataset.moneda === moneda));
+        }
+    }
+
+    function elegirCategoriaForm(categoria) {
+        form.categoria = categoria;
+        for (const b of $("categoriasForm").querySelectorAll("[data-categoria]")) {
+            b.setAttribute("aria-pressed", String(b.dataset.categoria === categoria));
+        }
+        // Un fijo casi siempre se repite: marcarlo, salvo que ya lo hayan tocado.
+        if (form.modo === "nuevo" && !form.repetirTocado) $("campoRepetir").checked = categoria === "fijo";
+    }
+
+    function limpiarErrores() {
+        $("errorForm").hidden = true;
+        for (const c of $("formGasto").querySelectorAll("[aria-invalid]")) c.removeAttribute("aria-invalid");
+    }
+
+    function mostrarError(texto) {
+        $("errorForm").textContent = texto;
+        $("errorForm").hidden = false;
+    }
+
+    // datos: { fecha, concepto, monto, moneda, categoria, repetir, esCopia, actualizarFijo }
+    function prepararForm(modo, id, datos = {}) {
+        Object.assign(form, { modo, id, repetirTocado: false });
+        limpiarErrores();
+        $("campoFecha").value = datos.fecha || fechaPorDefecto();
+        $("campoConcepto").value = datos.concepto || "";
+        $("campoMonto").value = datos.monto != null ? montoEditable(datos.monto) : "";
+        elegirMoneda(datos.moneda || "ARS");
+        elegirCategoriaForm(datos.categoria || null);
+        $("campoRepetir").checked = datos.repetir ?? datos.categoria === "fijo";
+
+        const titulos = { nuevo: "Nuevo gasto", gasto: "Editar gasto", fijo: "Editar fijo" };
+        const botones = { nuevo: "Guardar gasto", gasto: "Guardar cambios", fijo: "Guardar fijo" };
+        $("tituloFormulario").textContent = titulos[modo];
+        $("botonGuardar").textContent = botones[modo];
+        $("cancelarEdicion").hidden = modo === "nuevo";
+        $("filaRepetir").hidden = modo === "fijo" || !!datos.esCopia;
+        $("filaActualizarFijo").hidden = !datos.esCopia;
+        $("campoActualizarFijo").checked = datos.actualizarFijo ?? true;
+    }
+
+    function enfocarForm() {
+        $("formGasto").scrollIntoView({ behavior: "smooth", block: "start" });
+        $("campoConcepto").focus({ preventScroll: true });
+    }
+
+    function enumerar(lista) {
+        return lista.length > 1 ? lista.slice(0, -1).join(", ") + " y " + lista[lista.length - 1] : lista[0];
+    }
+
+    function leerForm() {
+        limpiarErrores();
+        const fecha = $("campoFecha").value;
+        const concepto = $("campoConcepto").value.trim();
+        const monto = H.fijos.leerMonto($("campoMonto").value);
+        const faltan = [];
+        if (!fecha) { faltan.push("la fecha"); $("campoFecha").setAttribute("aria-invalid", "true"); }
+        if (!concepto) { faltan.push("el concepto"); $("campoConcepto").setAttribute("aria-invalid", "true"); }
+        if (!(monto > 0)) { faltan.push("un monto mayor a cero"); $("campoMonto").setAttribute("aria-invalid", "true"); }
+        if (!form.categoria) faltan.push("la categoría");
+        if (faltan.length) {
+            mostrarError("Falta " + enumerar(faltan) + ".");
+            return null;
+        }
+        return { fecha, concepto, monto, moneda: form.moneda, categoria: form.categoria };
+    }
+
+    async function guardarGastos(lista) {
+        await H.datos.guardarGastos(lista);
+        const nuevos = lista.filter(g => !estado.gastos.some(x => x.id === g.id));
+        reemplazarGastos(lista);
+        estado.gastos = estado.gastos.concat(nuevos);
+    }
+
+    async function crearPlantilla(datos, ahora) {
+        const plantilla = H.fijos.nuevaPlantilla(datos, ahora);
+        await H.datos.guardarFijos([plantilla]);
+        estado.fijos.push(plantilla);
+        return plantilla;
+    }
+
+    // Guarda la plantilla y lleva el cambio a las copias sin confirmar.
+    async function actualizarPlantilla(plantilla) {
+        await H.datos.guardarFijos([plantilla]);
+        estado.fijos = estado.fijos.map(f => f.id === plantilla.id ? plantilla : f);
+        await guardarGastos(H.fijos.actualizarPendientes(plantilla, estado.gastos, estado.tipos));
+    }
+
+    async function guardarForm() {
+        const datos = leerForm();
+        if (!datos) return;
+        const ahora = new Date();
+        const mes = datos.fecha.slice(0, 7);
+        let mensaje;
+
+        if (form.modo === "nuevo") {
+            if ($("campoRepetir").checked) {
+                const plantilla = await crearPlantilla(datos, ahora);
+                const primero = { ...H.fijos.copiaDelMes(plantilla, mes, estado.tipos, ahora), fecha: datos.fecha, pendiente: false };
+                await guardarGastos([primero]);
+                await copiarFijos();
+                mensaje = `Se guardó "${datos.concepto}" y se va a copiar todos los meses.`;
+            } else {
+                await guardarGastos([H.fijos.gastoManual(datos, estado.tipos, ahora)]);
+                mensaje = `Se guardó "${datos.concepto}".`;
+            }
+        } else if (form.modo === "gasto") {
+            const viejo = estado.gastos.find(g => g.id === form.id);
+            if (viejo.plantillaFija && mes !== viejo.mes) {
+                mostrarError(`Un fijo no se puede pasar a otro mes. Si en ${H.nombreMes(viejo.mes)} no se paga, usá "No se paga este mes".`);
+                return;
+            }
+            const editado = {
+                ...viejo, ...datos, mes,
+                montoARS: H.aPesos(datos.monto, datos.moneda, H.cambio.valor(estado.tipos, mes)),
+                clasificadoPor: "manual",
+                pendiente: false,
+                actualizado: ahora.toISOString(),
+            };
+            if (viejo.plantillaFija && $("campoActualizarFijo").checked) {
+                await guardarGastos([editado]);
+                const p = estado.fijos.find(f => f.id === viejo.plantillaFija);
+                if (p) {
+                    await actualizarPlantilla({
+                        ...p, concepto: datos.concepto, monto: datos.monto, moneda: datos.moneda,
+                        categoria: datos.categoria, actualizado: ahora.toISOString(),
+                    });
+                }
+            } else if (!viejo.plantillaFija && $("campoRepetir").checked) {
+                const plantilla = await crearPlantilla(datos, ahora);
+                editado.plantillaFija = plantilla.id;
+                await guardarGastos([editado]);
+                await copiarFijos();
+            } else {
+                await guardarGastos([editado]);
+            }
+            mensaje = "Se guardaron los cambios.";
+        } else {
+            const p = estado.fijos.find(f => f.id === form.id);
+            await actualizarPlantilla({
+                ...p, concepto: datos.concepto, monto: datos.monto, moneda: datos.moneda,
+                categoria: datos.categoria, dia: Number(datos.fecha.slice(8, 10)), actualizado: ahora.toISOString(),
+            });
+            mensaje = `Se actualizó el fijo "${datos.concepto}". Los meses ya confirmados no cambian.`;
+        }
+
+        if (form.modo !== "fijo") estado.mes = mes;
+        prepararForm("nuevo", null, { fecha: datos.fecha, moneda: datos.moneda });
+        dibujar();
+        avisar(mensaje, "ok");
+    }
+
+    function editarGasto(id) {
+        const g = estado.gastos.find(x => x.id === id);
+        if (!g) return;
+        if ($("dialogoCategoria").open) $("dialogoCategoria").close();
+        gastoEnEdicion = null;
+        estado.mes = g.mes;
+        // Al editar un mes viejo de un fijo, no pisar el monto de meses
+        // posteriores que ya se confirmaron.
+        const hayPosteriores = estado.gastos.some(x =>
+            x.plantillaFija && x.plantillaFija === g.plantillaFija && x.mes > g.mes && !x.pendiente);
+        prepararForm("gasto", id, { ...g, repetir: false, esCopia: !!g.plantillaFija, actualizarFijo: !hayPosteriores });
+        estado.vista = "carga";
+        if (location.hash !== "#carga") location.hash = "carga";
+        dibujar();
+        enfocarForm();
+    }
+
+    function editarFijo(id) {
+        const p = estado.fijos.find(f => f.id === id);
+        if (!p) return;
+        const dia = Math.min(p.dia, H.diasDelMes(estado.mes));
+        prepararForm("fijo", id, { ...p, fecha: estado.mes + "-" + String(dia).padStart(2, "0") });
+        enfocarForm();
+    }
+
+    // Dos clics para lo que borra: el primero pide confirmación.
+    function confirmarAntes(boton, texto) {
+        if (boton.dataset.confirmar === "si") return true;
+        boton.dataset.confirmar = "si";
+        boton.textContent = texto;
+        boton.classList.add("boton-peligro");
+        return false;
+    }
+
+    async function pausarFijo(id, mes) {
+        const p = estado.fijos.find(f => f.id === id);
+        if (p && !p.pausados.includes(mes)) {
+            const editada = { ...p, pausados: p.pausados.concat(mes).sort(), actualizado: new Date().toISOString() };
+            await H.datos.guardarFijos([editada]);
+            estado.fijos = estado.fijos.map(f => f.id === id ? editada : f);
+        }
+        const copias = estado.gastos.filter(g => g.plantillaFija === id && g.mes === mes);
+        await H.datos.borrarGastos(copias.map(g => g.id));
+        estado.gastos = estado.gastos.filter(g => !copias.includes(g));
+    }
+
+    async function reanudarFijo(id, mes) {
+        const p = estado.fijos.find(f => f.id === id);
+        const editada = { ...p, pausados: p.pausados.filter(m => m !== mes), actualizado: new Date().toISOString() };
+        await H.datos.guardarFijos([editada]);
+        estado.fijos = estado.fijos.map(f => f.id === id ? editada : f);
+        await copiarFijos();
+    }
+
+    async function quitarFijo(boton) {
+        if (!confirmarAntes(boton, "¿Seguro? Dejar de repetir")) return;
+        const id = boton.dataset.quitarFijo;
+        const p = estado.fijos.find(f => f.id === id);
+        await H.datos.borrarFijo(id);
+        estado.fijos = estado.fijos.filter(f => f.id !== id);
+        // Las copias sin confirmar se van; las confirmadas quedan como gastos.
+        const pendientes = estado.gastos.filter(g => g.plantillaFija === id && g.pendiente);
+        await H.datos.borrarGastos(pendientes.map(g => g.id));
+        estado.gastos = estado.gastos.filter(g => !pendientes.includes(g));
+        if (form.modo === "fijo" && form.id === id) prepararForm("nuevo", null);
+        dibujar();
+        avisar(`"${p.concepto}" ya no se repite. Lo que ya estaba cargado se mantiene.`);
+    }
+
+    async function borrarGasto(boton) {
+        const g = estado.gastos.find(x => x.id === boton.dataset.borrarGasto);
+        if (!g) return;
+        if (!confirmarAntes(boton, g.plantillaFija ? "¿Seguro? No se paga" : "¿Seguro? Borrar")) return;
+
+        if (g.plantillaFija) {
+            await pausarFijo(g.plantillaFija, g.mes);
+            avisar(`"${g.concepto}" no se paga en ${H.nombreMes(g.mes)}. Los demás meses siguen igual.`);
+        } else {
+            await H.datos.borrarGastos([g.id]);
+            estado.gastos = estado.gastos.filter(x => x.id !== g.id);
+            avisar(`Se borró "${g.concepto}".`);
+        }
+        if ($("dialogoCategoria").open) $("dialogoCategoria").close();
+        gastoEnEdicion = null;
+        if (form.id === g.id) prepararForm("nuevo", null);
+        dibujar();
+        if ($("dialogoPendientes").open) dibujarPendientes();
+    }
+
+    function dibujarCarga() {
+        const mes = estado.mes;
+        const nombre = H.nombreMes(mes);
+
+        if (!$("categoriasForm").children.length) {
+            $("categoriasForm").innerHTML = botonesCategoria(form.categoria, true);
+        }
+
+        $("tituloManuales").textContent = `Cargados a mano en ${mesConAnio(mes)}`;
+        const manuales = C.ordenarMovimientos(estado.gastos.filter(g => g.mes === mes && g.fuente === "manual"));
+        $("listaManuales").innerHTML = manuales.length ? manuales.map(g => {
+            const c = H.categoria(g.categoria);
+            const notas = [c.singular, g.plantillaFija ? "se repite" : "", g.pendiente ? "a confirmar" : ""].filter(Boolean).join(" · ");
+            return `<li><span><b>${escapar(g.concepto)}</b> · ${H.diaMes(g.fecha)}<span class="sub">${notas}</span></span>` +
+                `<span class="derecha"><b>${montoConMoneda(g.monto, g.moneda)}</b>` +
+                `<button type="button" class="boton boton-chico" data-editar-gasto="${escapar(g.id)}">Editar</button></span></li>`;
+        }).join("") : `<li class="vacio-texto" style="border: 0">Todavía no cargaste nada a mano en ${nombre}.</li>`;
+
+        const fijos = [...estado.fijos].sort((a, b) => a.concepto.localeCompare(b.concepto));
+        $("listaFijos").innerHTML = fijos.length ? fijos.map(p => {
+            const pausado = p.pausados.includes(mes);
+            const c = H.categoria(p.categoria);
+            return `<div class="item-fijo${pausado ? " pausado" : ""}">
+                <div class="cabeza">
+                    <div><div class="nombre">${escapar(p.concepto)}</div>
+                        <div class="detalle">Todos los meses · día ${p.dia}${p.categoria !== "fijo" ? " · " + c.singular : ""}${pausado ? ` · no se paga en ${nombre}` : ""}</div></div>
+                    <div class="importe">${montoConMoneda(p.monto, p.moneda)}</div>
+                </div>
+                <div class="acciones">
+                    <button type="button" class="boton boton-chico" data-editar-fijo="${p.id}">Editar</button>
+                    ${pausado
+                        ? `<button type="button" class="boton boton-chico" data-reanudar-fijo="${p.id}">Se paga en ${nombre}</button>`
+                        : `<button type="button" class="boton boton-chico" data-pausar-fijo="${p.id}">No se paga en ${nombre}</button>`}
+                    <button type="button" class="boton boton-chico" data-quitar-fijo="${p.id}">Dejar de repetir</button>
+                </div>
+            </div>`;
+        }).join("") : `<p class="vacio-texto" style="margin: 0">Todavía no hay fijos. Cargá un gasto con "Se repite todos los meses".</p>`;
+
+        $("tituloAlacranes").textContent = `Alacranes de ${nombre}`;
+        const alacranes = C.ordenarMovimientos(estado.gastos.filter(g => g.mes === mes && g.categoria === "alacran"));
+        const total = alacranes.reduce((t, g) => t + (g.montoARS || 0), 0);
+        $("listaAlacranes").innerHTML = alacranes.length
+            ? `<ul class="lista" style="margin: 0">${alacranes.map(g =>
+                `<li><span><b>${escapar(g.concepto)}</b> · ${H.diaMes(g.fecha)}</span><b>${montoConMoneda(g.monto, g.moneda)}</b></li>`
+            ).join("")}</ul><p>Total: <b>${H.plataRedonda(total)}</b></p>`
+            : `<p>Ninguno apareció este mes.</p>`;
+    }
+
+    // ---------- Fijos para confirmar ----------
+
+    function abrirPendientes() {
+        dibujarPendientes();
+        $("dialogoPendientes").showModal();
+    }
+
+    function dibujarPendientes() {
+        const lista = C.resumenMes(estado.gastos, estado.mes).pendientes.gastos
+            .sort((a, b) => a.fecha.localeCompare(b.fecha));
+        $("tituloPendientes").textContent = `Fijos de ${H.nombreMes(estado.mes)} para confirmar`;
+        $("listaPendientes").innerHTML = lista.length ? lista.map(g => `
+            <div class="fila-ajuste" data-pendiente="${escapar(g.id)}">
+                <span><b>${escapar(g.concepto)}</b><span class="sub">${fechaLarga(g.fecha)} · ${H.categoria(g.categoria).singular}</span></span>
+                <span class="controles">
+                    <span>${g.moneda === "USD" ? "U$S" : "$"}</span>
+                    <input class="campo" type="text" inputmode="decimal" style="width: 130px" value="${montoEditable(g.monto)}" aria-label="Monto de ${escapar(g.concepto)}">
+                    <button type="button" class="boton boton-chico" data-confirmar-pendiente="${escapar(g.id)}">Confirmar</button>
+                    <button type="button" class="boton boton-chico" data-borrar-gasto="${escapar(g.id)}">No se paga</button>
+                </span>
+            </div>`).join("") : `<p class="vacio-texto" style="margin: 0">No queda nada por confirmar.</p>`;
+        $("confirmarTodos").hidden = lista.length === 0;
+    }
+
+    // Confirma la copia con el monto escrito. Si cambió, el fijo pasa a
+    // usar ese monto de ahora en adelante.
+    async function confirmarPendiente(id) {
+        const g = estado.gastos.find(x => x.id === id);
+        const fila = $("listaPendientes").querySelector(`[data-pendiente="${CSS.escape(id)}"]`);
+        const campo = fila.querySelector("input");
+        const monto = H.fijos.leerMonto(campo.value);
+        if (!(monto > 0)) {
+            campo.setAttribute("aria-invalid", "true");
+            avisar(`Escribí un monto válido para "${g.concepto}".`, "error");
+            return false;
+        }
+        const ahora = new Date().toISOString();
+        await guardarGastos([{
+            ...g, monto, pendiente: false, actualizado: ahora,
+            montoARS: H.aPesos(monto, g.moneda, H.cambio.valor(estado.tipos, g.mes)),
+        }]);
+        const p = estado.fijos.find(f => f.id === g.plantillaFija);
+        if (p && monto !== p.monto) await actualizarPlantilla({ ...p, monto, actualizado: ahora });
+        return true;
+    }
+
+    async function confirmarTodos() {
+        const ids = [...$("listaPendientes").querySelectorAll("[data-pendiente]")].map(f => f.dataset.pendiente);
+        let confirmados = 0;
+        for (const id of ids) if (await confirmarPendiente(id)) confirmados++;
+        dibujar();
+        if (confirmados === ids.length) {
+            $("dialogoPendientes").close();
+            avisar(confirmados === 1 ? "Se confirmó 1 fijo." : `Se confirmaron ${confirmados} fijos.`, "ok");
+        } else {
+            dibujarPendientes();
+        }
+    }
+
+    // ---------- Vistas ----------
+
+    function mostrarVista() {
+        estado.vista = location.hash === "#carga" ? "carga" : "tablero";
+        if (estado.vista === "carga" && form.modo === "nuevo" && !$("campoConcepto").value) prepararForm("nuevo", null);
+        dibujar();
+        window.scrollTo(0, 0);
     }
 
     // ---------- Ajustes ----------
@@ -877,12 +1308,33 @@
                 dibujar();
             } else if (boton.dataset.categoria) {
                 const item = boton.closest(".item-clasificar");
-                if (item) clasificarComercio(item, boton.dataset.categoria);
+                if (boton.closest("#categoriasForm")) elegirCategoriaForm(boton.dataset.categoria);
+                else if (item) clasificarComercio(item, boton.dataset.categoria);
                 else if (gastoEnEdicion) elegirCategoria(boton.dataset.categoria);
+            } else if (boton.dataset.moneda) {
+                elegirMoneda(boton.dataset.moneda);
             } else if (boton.dataset.quitarRegla) {
                 quitarRegla(boton.dataset.quitarRegla);
             } else if (boton.dataset.quitarDocumento) {
                 quitarDocumento(boton);
+            } else if (boton.dataset.editarGasto) {
+                editarGasto(boton.dataset.editarGasto);
+            } else if (boton.dataset.borrarGasto) {
+                borrarGasto(boton);
+            } else if (boton.dataset.editarFijo) {
+                editarFijo(boton.dataset.editarFijo);
+            } else if (boton.dataset.pausarFijo) {
+                pausarFijo(boton.dataset.pausarFijo, estado.mes).then(dibujar);
+            } else if (boton.dataset.reanudarFijo) {
+                reanudarFijo(boton.dataset.reanudarFijo, estado.mes).then(dibujar);
+            } else if (boton.dataset.quitarFijo) {
+                quitarFijo(boton);
+            } else if (boton.dataset.confirmarPendiente) {
+                confirmarPendiente(boton.dataset.confirmarPendiente).then(ok => {
+                    if (!ok) return;
+                    dibujar();
+                    dibujarPendientes();
+                });
             }
         });
 
@@ -916,8 +1368,33 @@
             dibujar();
         });
 
-        $("botonManual").addEventListener("click", () => {
-            avisar("La carga manual (fijos, alacranes, gastos sueltos) llega en la fase 3.");
+        // Carga manual.
+        window.addEventListener("hashchange", mostrarVista);
+        $("formGasto").addEventListener("submit", e => {
+            e.preventDefault();
+            guardarForm().catch(err => mostrarError("No pude guardar: " + (err.message || err)));
+        });
+        $("campoRepetir").addEventListener("change", () => { form.repetirTocado = true; });
+        $("cancelarEdicion").addEventListener("click", () => prepararForm("nuevo", null));
+        const moverMesCarga = mes => {
+            estado.mes = mes;
+            // Si el formulario está vacío, que la fecha siga al mes elegido.
+            if (form.modo === "nuevo" && !$("campoConcepto").value) $("campoFecha").value = fechaPorDefecto();
+            dibujar();
+        };
+        $("mesAnteriorCarga").addEventListener("click", () => moverMesCarga(H.mesAnterior(estado.mes)));
+        $("mesSiguienteCarga").addEventListener("click", () => moverMesCarga(H.mesSiguiente(estado.mes)));
+        $("agregarFijo").addEventListener("click", () => {
+            prepararForm("nuevo", null, { categoria: "fijo", repetir: true });
+            enfocarForm();
+        });
+        $("registrarAlacran").addEventListener("click", () => {
+            prepararForm("nuevo", null, { categoria: "alacran", repetir: false });
+            enfocarForm();
+        });
+        $("botonPendientes").addEventListener("click", abrirPendientes);
+        $("confirmarTodos").addEventListener("click", () => {
+            confirmarTodos().catch(err => avisar("No pude confirmar: " + (err.message || err), "error"));
         });
 
         $("botonClasificar").addEventListener("click", abrirClasificar);
@@ -936,7 +1413,9 @@
     }
 
     conectar();
-    recargar().catch(e => {
+    recargar().then(() => {
+        if (location.hash === "#carga") mostrarVista();
+    }).catch(e => {
         avisar("No pude abrir el guardado local del navegador: " + (e.message || e), "error");
         $("bienvenida").hidden = false;
     });

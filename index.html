@@ -18,11 +18,14 @@
     <div class="marca">
         <img src="icon.png" alt="Logo de Hormiguero">
         <div>
-            <h1>Hormiguero</h1>
-            <p>Tus gastos del mes, todos juntos</p>
+            <h1 id="tituloPagina">Hormiguero</h1>
+            <p id="subtituloPagina">Tus gastos del mes, todos juntos</p>
         </div>
     </div>
-    <div class="encabezado-acciones">
+    <div class="encabezado-acciones" id="accionesCarga" hidden>
+        <a href="#" class="boton boton-oscuro">Volver al tablero</a>
+    </div>
+    <div class="encabezado-acciones" id="accionesTablero">
         <div class="estado">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2E7D32" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
             Guardado en este dispositivo
@@ -42,6 +45,7 @@
         <p>Cargá el Excel que exporta Ants o el resumen de tu Visa Santander en PDF. Hormiguero los lee en tu navegador: los datos no salen de este dispositivo.</p>
         <div class="acciones-carga" style="max-width: 420px; margin: 0 auto">
             <button type="button" class="boton boton-violeta" data-accion="cargar-documento">Cargar documento</button>
+            <a href="#carga" class="boton boton-cuadrado">Cargar gasto manual</a>
         </div>
     </section>
 
@@ -65,6 +69,14 @@
                 <div class="llamado-detalle">Elegí la categoría de cada comercio una vez; desde el mes que viene se clasifican solos.</div>
             </div>
             <button type="button" class="boton boton-violeta" id="botonClasificar">Clasificar</button>
+        </section>
+
+        <section class="llamado llamado-fijo" id="llamadoPendientes" hidden>
+            <div>
+                <b id="llamadoPendientesTitulo"></b>
+                <div class="llamado-detalle">Se copiaron solos y ya suman al mes. Confirmá el monto o marcá los que no se pagan.</div>
+            </div>
+            <button type="button" class="boton" id="botonPendientes">Revisar</button>
         </section>
 
         <section class="llamado llamado-alerta" id="llamadoCambio" hidden>
@@ -129,7 +141,7 @@
                 </div>
                 <div class="acciones-carga">
                     <button type="button" class="boton boton-violeta" data-accion="cargar-documento">Cargar documento</button>
-                    <button type="button" class="boton boton-cuadrado" id="botonManual">Cargar gasto manual</button>
+                    <a href="#carga" class="boton boton-cuadrado">Cargar gasto manual</a>
                 </div>
             </section>
         </div>
@@ -193,6 +205,67 @@
         </section>
 
     </div>
+
+    <!-- Carga manual (#carga) -->
+    <div class="carga" id="vistaCarga" hidden>
+        <div class="carga-principal">
+            <form class="tarjeta formulario" id="formGasto" novalidate>
+                <h2 id="tituloFormulario">Nuevo gasto</h2>
+                <div class="campos">
+                    <label class="campo-etiqueta">Fecha<input class="campo" type="date" id="campoFecha" required></label>
+                    <label class="campo-etiqueta">Concepto<input class="campo" type="text" id="campoConcepto" placeholder="Ej.: Hipoteca" autocomplete="off" required></label>
+                    <label class="campo-etiqueta">Monto<input class="campo" type="text" id="campoMonto" inputmode="decimal" placeholder="$ 0" autocomplete="off" required></label>
+                </div>
+                <div class="fila-opciones" role="group" aria-labelledby="etqMoneda">
+                    <span class="campo-etiqueta" id="etqMoneda">Moneda</span>
+                    <button type="button" class="boton" data-moneda="ARS" aria-pressed="true">Pesos</button>
+                    <button type="button" class="boton" data-moneda="USD" aria-pressed="false">Dólares</button>
+                </div>
+                <div class="grupo-categorias" role="group" aria-labelledby="etqCategoria">
+                    <span class="campo-etiqueta" id="etqCategoria">Categoría</span>
+                    <div class="botones-cat" id="categoriasForm"></div>
+                </div>
+                <label class="repetir" id="filaRepetir">
+                    <input type="checkbox" id="campoRepetir">
+                    <span>Se repite todos los meses<span class="repetir-detalle">Se copia solo a cada mes nuevo; solo confirmás el monto</span></span>
+                </label>
+                <label class="repetir" id="filaActualizarFijo" hidden>
+                    <input type="checkbox" id="campoActualizarFijo" checked>
+                    <span>Usar este monto en los próximos meses<span class="repetir-detalle">Actualiza el fijo; los meses ya confirmados no cambian</span></span>
+                </label>
+                <p class="error-form" id="errorForm" role="alert" hidden></p>
+                <div class="form-botones">
+                    <button type="button" class="boton" id="cancelarEdicion" hidden>Cancelar</button>
+                    <button type="submit" class="boton boton-violeta boton-guardar" id="botonGuardar">Guardar gasto</button>
+                </div>
+            </form>
+
+            <section class="tarjeta">
+                <div class="movimientos-cabeza">
+                    <h2 id="tituloManuales">Cargados a mano</h2>
+                    <div class="filtros" role="group" aria-label="Cambiar de mes">
+                        <button type="button" class="boton boton-chico" id="mesAnteriorCarga" aria-label="Mes anterior">‹</button>
+                        <button type="button" class="boton boton-chico" id="mesSiguienteCarga" aria-label="Mes siguiente">›</button>
+                    </div>
+                </div>
+                <ul class="lista" id="listaManuales"></ul>
+            </section>
+        </div>
+
+        <aside class="carga-lateral">
+            <section class="tarjeta lateral">
+                <h2>Fijos que se repiten</h2>
+                <div id="listaFijos" class="lista-fijos"></div>
+                <button type="button" class="boton" id="agregarFijo">+ Agregar fijo</button>
+            </section>
+
+            <section class="panel-alacranes">
+                <h2 id="tituloAlacranes">Alacranes del mes</h2>
+                <div id="listaAlacranes"></div>
+                <button type="button" class="boton-alacran" id="registrarAlacran">Registrar alacrán</button>
+            </section>
+        </aside>
+    </div>
 </main>
 
 <input type="file" id="archivo" accept=".xlsx,.xls,.csv,.pdf" hidden>
@@ -225,6 +298,18 @@
         <div id="cuerpoCategoria"></div>
         <div class="dialogo-botones">
             <button type="button" class="boton" data-cerrar>Cancelar</button>
+        </div>
+    </div>
+</dialog>
+
+<dialog id="dialogoPendientes" aria-labelledby="tituloPendientes">
+    <div class="tarjeta">
+        <h2 id="tituloPendientes">Fijos para confirmar</h2>
+        <p class="secundario">Revisá el monto de cada uno. Si cambió, escribí el nuevo y se usa también para los próximos meses.</p>
+        <div id="listaPendientes"></div>
+        <div class="dialogo-botones">
+            <button type="button" class="boton" data-cerrar>Después</button>
+            <button type="button" class="boton boton-violeta" id="confirmarTodos">Confirmar todos</button>
         </div>
     </div>
 </dialog>
@@ -276,6 +361,7 @@
 <script src="js/datos.js"></script>
 <script src="js/reglas.js"></script>
 <script src="js/cambio.js"></script>
+<script src="js/fijos.js"></script>
 <script src="js/lectores/ants-excel.js"></script>
 <script src="js/lectores/visa-santander.js"></script>
 <script src="js/app.js"></script>

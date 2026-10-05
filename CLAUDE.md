@@ -235,3 +235,4 @@ box-shadow:
 
 - **Impuestos y percepciones** cuentan como **fijos** (y se muestran aparte en el bloque "Tarjeta de crédito").
 - **Tipo de cambio:** se toma del "Su pago en pesos … tcNNNN" de cada resumen, que es el cambio al que se pagaron los dólares del resumen anterior (origen `pago`). Mientras no llega el resumen siguiente, el mes usa el último pago conocido (origen `sugerido`). Lo que el usuario carga a mano en Ajustes (origen `manual`) nunca se pisa.
+- **Fijos que se repiten:** cada plantilla se copia sola a cada mes, desde el primero hasta el mes actual (nunca a meses futuros), como gasto `pendiente` que **ya suma** al total. El tablero avisa para confirmar o ajustar el monto; si cambia, la plantilla y las demás copias sin confirmar pasan a ese monto. "No se paga este mes" = pausar ese mes en la plantilla. Cada copia tiene id fijo `fijo-<plantilla>-<mes>`, así nunca se duplica.

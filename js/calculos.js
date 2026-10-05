@@ -35,7 +35,11 @@
 
         const sinCambio = gastos.filter(g => g.montoARS == null).length;
 
-        return { mes, gastos, porCategoria, hormigas, evitables, total, porClasificar, impuestos, sinCambio };
+        // Copias de fijos que se crearon solas y falta confirmar. Ya suman.
+        const deFijos = gastos.filter(g => g.pendiente);
+        const pendientes = { total: sumar(deFijos), cantidad: deFijos.length, gastos: deFijos };
+
+        return { mes, gastos, porCategoria, hormigas, evitables, total, porClasificar, impuestos, sinCambio, pendientes };
     }
 
     // Semanas fijas del mes: 1–7, 8–14, 15–21, 22–28, 29–fin.

@@ -91,6 +91,13 @@
         return anio + "-" + String(m).padStart(2, "0");
     }
 
+    function mesSiguiente(mes) {
+        let anio = Number(mes.slice(0, 4));
+        let m = Number(mes.slice(5, 7)) + 1;
+        if (m === 13) { m = 1; anio++; }
+        return anio + "-" + String(m).padStart(2, "0");
+    }
+
     function diasDelMes(mes) {
         return new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0).getDate();
     }
@@ -126,6 +133,7 @@
     H.diaMes = diaMes;
     H.nombreMes = nombreMes;
     H.mesAnterior = mesAnterior;
+    H.mesSiguiente = mesSiguiente;
     H.diasDelMes = diasDelMes;
     H.normalizar = normalizar;
     H.claveConcepto = claveConcepto;

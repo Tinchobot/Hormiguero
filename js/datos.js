@@ -6,6 +6,7 @@
 //   documentos  clave id (resúmenes de tarjeta importados)
 //   reglas      clave id (clasificación por comercio)
 //   config      clave "clave" (tipos de cambio, preferencias)
+//   fijos       clave id (plantillas de gastos que se repiten)
 //
 // En la fase 4 esto pasa a ser la caché de lo que vive en Google Drive.
 // =====================================
@@ -13,7 +14,7 @@
 (function (H) {
 
     const BASE = "hormiguero";
-    const VERSION = 2;
+    const VERSION = 3;
     let conexion = null;
 
     function abrir() {
@@ -28,6 +29,7 @@
                 if (!db.objectStoreNames.contains("documentos")) db.createObjectStore("documentos", { keyPath: "id" });
                 if (!db.objectStoreNames.contains("reglas")) db.createObjectStore("reglas", { keyPath: "id" });
                 if (!db.objectStoreNames.contains("config")) db.createObjectStore("config", { keyPath: "clave" });
+                if (!db.objectStoreNames.contains("fijos")) db.createObjectStore("fijos", { keyPath: "id" });
             };
             pedido.onsuccess = () => resolver(pedido.result);
             pedido.onerror = () => rechazar(pedido.error);
@@ -65,10 +67,10 @@
         await fin(tx);
     }
 
-    async function borrar(almacen, id) {
+    async function borrar(almacen, ids) {
         const db = await abrir();
         const tx = db.transaction(almacen, "readwrite");
-        tx.objectStore(almacen).delete(id);
+        for (const id of [].concat(ids)) tx.objectStore(almacen).delete(id);
         await fin(tx);
     }
 
@@ -130,7 +132,7 @@
 
     async function borrarTodo() {
         const db = await abrir();
-        const almacenes = ["gastos", "documentos", "reglas", "config"];
+        const almacenes = ["gastos", "documentos", "reglas", "config", "fijos"];
         const tx = db.transaction(almacenes, "readwrite");
         for (const a of almacenes) tx.objectStore(a).clear();
         await fin(tx);
@@ -140,9 +142,13 @@
         todosLosGastos: () => todos("gastos"),
         todosLosDocumentos: () => todos("documentos"),
         todasLasReglas: () => todos("reglas"),
+        todosLosFijos: () => todos("fijos"),
         guardarGastos: lista => guardar("gastos", lista),
         guardarReglas: lista => guardar("reglas", lista),
+        guardarFijos: lista => guardar("fijos", lista),
         borrarRegla: id => borrar("reglas", id),
+        borrarGastos: ids => borrar("gastos", ids),
+        borrarFijo: id => borrar("fijos", id),
         agregarNuevos,
         existeDocumento,
         guardarDocumento,
