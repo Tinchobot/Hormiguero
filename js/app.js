@@ -411,18 +411,36 @@
         return `${H.plata(g.montoARS)}<small>${H.dolares(g.monto)}</small>`;
     }
 
+    // Filtros: Todos y las seis categorías, cada una con su cantidad.
+    function dibujarFiltros(gastos) {
+        const pildora = (filtro, nombre, cantidad) =>
+            `<button type="button" class="pildora" data-filtro="${filtro}" aria-pressed="${filtro === estado.filtro}"` +
+            `${cantidad === 0 ? ` data-vacio="si"` : ""}>${nombre} (${cantidad})</button>`;
+        $("filtrosMovimientos").innerHTML =
+            pildora("todos", "Todos", gastos.length) +
+            H.CATEGORIAS.map(c => pildora(c.clave, c.nombre, gastos.filter(g => g.categoria === c.clave).length)).join("");
+    }
+
     function dibujarMovimientos(r) {
+        // Un filtro que ya no existe (de una versión anterior) vuelve a Todos.
+        if (estado.filtro !== "todos" && !H.categoria(estado.filtro)) estado.filtro = "todos";
+        dibujarFiltros(r.gastos);
+
         let lista = C.ordenarMovimientos(r.gastos);
-        if (estado.filtro === "ants" || estado.filtro === "tarjeta") {
-            lista = lista.filter(g => g.fuente === estado.filtro);
-        } else if (estado.filtro === "fijo") {
-            lista = lista.filter(g => g.categoria === "fijo");
-        }
+        if (estado.filtro !== "todos") lista = lista.filter(g => g.categoria === estado.filtro);
 
         const total = lista.length;
+        const suma = lista.reduce((t, g) => t + (g.montoARS || 0), 0);
+        const sinConvertir = lista.filter(g => g.montoARS == null).length;
         if (!estado.verTodos) lista = lista.slice(0, MOVIMIENTOS_VISIBLES);
 
-        $("tituloMovimientos").textContent = estado.verTodos ? `Movimientos del mes (${total})` : "Últimos movimientos";
+        $("tituloMovimientos").textContent = `Movimientos del mes (${total})`;
+
+        $("pieMovimientos").hidden = total === 0;
+        $("pieMovimientosTexto").textContent = (estado.filtro === "todos" ? "Total" : "Total " + H.categoria(estado.filtro).nombre.toLowerCase()) +
+            ` · ${cantidadMovimientos(total)}` +
+            (sinConvertir ? ` (sin ${sinConvertir === 1 ? "1 gasto" : sinConvertir + " gastos"} en dólares sin tipo de cambio)` : "");
+        $("pieMovimientosSuma").textContent = H.plata(suma);
 
         $("cuerpoMovimientos").innerHTML = lista.map(g => {
             const c = g.categoria ? H.categoria(g.categoria) : null;
@@ -438,10 +456,6 @@
         }).join("");
 
         $("movimientosVacio").hidden = total > 0;
-
-        for (const b of $("filtrosMovimientos").querySelectorAll("button")) {
-            b.setAttribute("aria-pressed", String(b.dataset.filtro === estado.filtro));
-        }
 
         const boton = $("verTodos");
         boton.hidden = !estado.verTodos && total <= MOVIMIENTOS_VISIBLES;

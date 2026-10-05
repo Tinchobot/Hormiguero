@@ -184,13 +184,8 @@
 
         <section class="tarjeta" style="margin-top: 20px">
             <div class="movimientos-cabeza">
-                <h2 id="tituloMovimientos">Últimos movimientos</h2>
-                <div class="filtros" role="group" aria-label="Filtrar movimientos" id="filtrosMovimientos">
-                    <button type="button" class="boton" data-filtro="todos" aria-pressed="true">Todos</button>
-                    <button type="button" class="boton" data-filtro="ants" aria-pressed="false">Ants</button>
-                    <button type="button" class="boton" data-filtro="tarjeta" aria-pressed="false">Tarjetas</button>
-                    <button type="button" class="boton" data-filtro="fijo" aria-pressed="false">Fijos</button>
-                </div>
+                <h2 id="tituloMovimientos">Movimientos del mes</h2>
+                <div class="filtros" role="group" aria-label="Filtrar por categoría" id="filtrosMovimientos"></div>
             </div>
             <div class="tabla-contenedor">
                 <table>
@@ -198,6 +193,9 @@
                         <tr><th>FECHA</th><th>CONCEPTO</th><th>FUENTE</th><th>CATEGORÍA</th><th style="text-align: right">MONTO</th></tr>
                     </thead>
                     <tbody id="cuerpoMovimientos"></tbody>
+                    <tfoot id="pieMovimientos">
+                        <tr><td colspan="4" id="pieMovimientosTexto">Total</td><td class="monto" id="pieMovimientosSuma"></td></tr>
+                    </tfoot>
                 </table>
             </div>
             <p class="vacio-texto" id="movimientosVacio" hidden>No hay movimientos con este filtro.</p>

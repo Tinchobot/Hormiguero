@@ -577,7 +577,8 @@ tbody tr.clicable:focus-visible { outline: 3px solid #4526B8; outline-offset: -3
 
 .botones-cat { display: flex; flex-wrap: wrap; gap: 10px; }
 
-.boton-cat {
+.boton-cat,
+.pildora[data-filtro]:not([data-filtro="todos"]) {
     min-height: 44px;
     padding: 0 16px;
     border-radius: 999px;
@@ -594,17 +595,59 @@ tbody tr.clicable:focus-visible { outline: 3px solid #4526B8; outline-offset: -3
     cursor: pointer;
 }
 
-.boton-cat[data-categoria="fijo"]        { --c: #00796B; --c1: #E6F7F4; --c2: #9ED9D0; --ct: #00564B; }
-.boton-cat[data-categoria="necesario"]   { --c: #2E7D32; --c1: #EEF9EE; --c2: #ABDDAF; --ct: #1E5A22; }
-.boton-cat[data-categoria="evitable"]    { --c: #EF6C00; --c1: #FFF4E8; --c2: #FFC88E; --ct: #8A3B00; }
-.boton-cat[data-categoria="innecesario"] { --c: #C62828; --c1: #FFF1F1; --c2: #F5B3B3; --ct: #8E1B1B; }
-.boton-cat[data-categoria="ahorro"]      { --c: #1E5AA8; --c1: #EFF5FF; --c2: #B3CDF3; --ct: #174A8C; }
-.boton-cat[data-categoria="alacran"]     { --c: #3E2723; --c1: #6D4C41; --c2: #3E2723; --ct: #FFE9C9; }
+.boton-cat[data-categoria="fijo"], .pildora[data-filtro="fijo"]        { --c: #00796B; --c1: #E6F7F4; --c2: #9ED9D0; --ct: #00564B; }
+.boton-cat[data-categoria="necesario"], .pildora[data-filtro="necesario"]   { --c: #2E7D32; --c1: #EEF9EE; --c2: #ABDDAF; --ct: #1E5A22; }
+.boton-cat[data-categoria="evitable"], .pildora[data-filtro="evitable"]    { --c: #EF6C00; --c1: #FFF4E8; --c2: #FFC88E; --ct: #8A3B00; }
+.boton-cat[data-categoria="innecesario"], .pildora[data-filtro="innecesario"] { --c: #C62828; --c1: #FFF1F1; --c2: #F5B3B3; --ct: #8E1B1B; }
+.boton-cat[data-categoria="ahorro"], .pildora[data-filtro="ahorro"]      { --c: #1E5AA8; --c1: #EFF5FF; --c2: #B3CDF3; --ct: #174A8C; }
+.boton-cat[data-categoria="alacran"], .pildora[data-filtro="alacran"]     { --c: #3E2723; --c1: #6D4C41; --c2: #3E2723; --ct: #FFE9C9; }
 
 .boton-cat:hover { filter: brightness(1.04); }
 .boton-cat:active { transform: translateY(1px); }
 .boton-cat:focus-visible { outline: 3px solid #4526B8; outline-offset: 2px; }
 .boton-cat[aria-pressed="true"] { outline: 3px solid #2B2410; outline-offset: 2px; }
+
+/* ---------- Píldoras de filtro de movimientos ---------- */
+
+.pildora {
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* "Todos": gota amarilla, como el resto de los botones del tablero. */
+.pildora[data-filtro="todos"] {
+    border: 1px solid #D9AE2C;
+    background: linear-gradient(180deg, #FFF8D6 0%, #FFE587 55%, #FFD54F 100%);
+    box-shadow:
+        inset 0 2px 1px rgba(255, 255, 255, 0.95),
+        inset 0 -3px 6px rgba(200, 135, 0, 0.28),
+        0 4px 8px rgba(120, 85, 0, 0.22);
+    color: var(--texto);
+}
+
+.pildora:hover { filter: brightness(1.04); }
+.pildora:active { transform: translateY(1px); }
+.pildora:focus-visible { outline: 3px solid #4526B8; outline-offset: 2px; }
+
+/* Activa: borde oscuro. */
+.pildora[data-filtro][aria-pressed="true"] { border: 2px solid #2B2410; }
+
+/* Sin movimientos: atenuada, pero se puede tocar. */
+.pildora[data-vacio="si"]:not([aria-pressed="true"]) { opacity: 0.45; box-shadow: none; }
+
+tfoot td {
+    border-top: 2px solid rgba(180, 130, 0, 0.45);
+    padding-top: 12px;
+    font-weight: 800;
+}
+
+tfoot .monto { font-family: var(--titulo); font-size: 16px; }
 
 /* ---------- Carga manual ---------- */
 
