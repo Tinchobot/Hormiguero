@@ -203,13 +203,24 @@
         return sellados;
     }
 
+    // Nombre del usuario para el título. Se guarda con fecha para sincronizar.
+    async function leerNombre() {
+        const n = await leerConfig("nombre", null);
+        return n ? n.valor : "";
+    }
+
+    async function guardarNombre(valor) {
+        await guardarConfig("nombre", { valor, actualizado: new Date().toISOString() });
+    }
+
     // ---------- Para la sincronización ----------
 
     // Todo lo local, con lápidas, en el formato de sincronizar.planificar.
     async function leerParaSincronizar() {
-        const [lapidas, tipos, ...listas] = await Promise.all([
+        const [lapidas, tipos, nombre, ...listas] = await Promise.all([
             todos("borrados"),
             leerConfig("tiposDeCambio", {}),
+            leerConfig("nombre", null),
             ...SINCRONIZADAS.map(todos),
         ]);
         const colecciones = {};
@@ -218,6 +229,8 @@
             colecciones[c] = listas[i].concat(delaColeccion);
         });
         colecciones.tipos = H.sincronizar.tiposAElementos(tipos);
+        const elementoNombre = H.sincronizar.nombreAElemento(nombre);
+        if (elementoNombre) colecciones.tipos.push(elementoNombre);
         return colecciones;
     }
 
@@ -239,6 +252,8 @@
         }
         if (tiposFusionados) {
             tx.objectStore("config").put({ clave: "tiposDeCambio", valor: H.sincronizar.elementosATipos(tiposFusionados) });
+            const nombre = H.sincronizar.elementoANombre(tiposFusionados);
+            if (nombre) tx.objectStore("config").put({ clave: "nombre", valor: nombre });
         }
         await fin(tx);
     }
@@ -281,6 +296,8 @@
         quitarDocumento,
         leerConfig,
         guardarConfig,
+        leerNombre,
+        guardarNombre,
         guardarTipos,
         leerParaSincronizar,
         aplicarSincronizacion,

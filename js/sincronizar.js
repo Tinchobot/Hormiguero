@@ -11,7 +11,7 @@
 //   documentos.json     resúmenes de tarjeta importados
 //   reglas.json         reglas por comercio
 //   fijos.json          plantillas de gastos que se repiten
-//   config.json         tipos de cambio por mes
+//   config.json         tipos de cambio por mes y nombre del usuario
 //
 // Cada archivo: { formato: "hormiguero", version: 1, elementos: [...] }
 //
@@ -70,6 +70,7 @@
     function elementosATipos(elementos) {
         const tipos = {};
         for (const e of elementos) {
+            if (!e.id.startsWith("tc-")) continue; // el nombre viaja en el mismo archivo
             const { id, mes, ...resto } = e;
             tipos[mes] = resto;
         }
@@ -92,6 +93,19 @@
             }
         }
         return sellados;
+    }
+
+    // El nombre del usuario ("El Hormiguero de Tincho") viaja en config.json
+    // como el elemento { id: "nombre", valor, actualizado }.
+    const ID_NOMBRE = "nombre";
+
+    function nombreAElemento(nombre) {
+        return nombre ? { id: ID_NOMBRE, ...nombre } : null;
+    }
+
+    function elementoANombre(elementos) {
+        const e = elementos.find(x => x.id === ID_NOMBRE);
+        return e ? { valor: e.valor, actualizado: e.actualizado } : null;
     }
 
     // ---------- Archivos ↔ colecciones ----------
@@ -183,7 +197,7 @@
 
     H.sincronizar = {
         COLECCIONES, fusionar, canonico, iguales, tiposAElementos, elementosATipos,
-        sellarTipos, leerArchivos, armarArchivos, planificar,
+        sellarTipos, nombreAElemento, elementoANombre, leerArchivos, armarArchivos, planificar,
     };
 
 })(globalThis.Hormiguero ||= {});

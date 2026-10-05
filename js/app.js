@@ -21,6 +21,7 @@
         reglas: [],
         fijos: [],          // plantillas de gastos que se repiten (ver fijos.js)
         tipos: {},          // tipos de cambio por mes (ver cambio.js)
+        nombre: "",         // para el título: "El Hormiguero de Tincho"
         vista: "tablero",   // tablero | carga
         mes: null,          // "2026-09"
         sinAlacranes: false,
@@ -648,9 +649,14 @@
 
     // ---------- Todo junto ----------
 
+    function tituloApp() {
+        return estado.nombre ? `El Hormiguero de ${estado.nombre}` : "Hormiguero";
+    }
+
     function dibujar() {
         const enCarga = estado.vista === "carga";
-        $("tituloPagina").textContent = enCarga ? "Carga manual" : "Hormiguero";
+        document.title = tituloApp();
+        $("tituloPagina").textContent = enCarga ? "Carga manual" : tituloApp();
         $("subtituloPagina").textContent = enCarga ? "Fijos, gastos sueltos y alacranes" : "Tus gastos del mes, todos juntos";
         $("accionesCarga").hidden = !enCarga;
         $("accionesTablero").hidden = enCarga;
@@ -685,14 +691,15 @@
     }
 
     async function recargar(mesPreferido) {
-        const [gastos, documentos, reglas, fijos, tipos] = await Promise.all([
+        const [gastos, documentos, reglas, fijos, tipos, nombre] = await Promise.all([
             H.datos.todosLosGastos(),
             H.datos.todosLosDocumentos(),
             H.datos.todasLasReglas(),
             H.datos.todosLosFijos(),
             H.datos.leerConfig("tiposDeCambio", {}),
+            H.datos.leerNombre(),
         ]);
-        Object.assign(estado, { gastos, documentos, reglas, fijos, tipos });
+        Object.assign(estado, { gastos, documentos, reglas, fijos, tipos, nombre });
         await copiarFijos();
         estado.mes = mesPreferido || estado.mes || ultimoMesConDatos() || mesActual();
         dibujar();
@@ -1373,6 +1380,7 @@
 
     function dibujarAjustes() {
         dibujarDrive();
+        if (document.activeElement !== $("campoNombre")) $("campoNombre").value = estado.nombre;
 
         // Tipo de cambio: un renglón por cada mes con consumos en dólares.
         const usdPorMes = {};
@@ -1413,6 +1421,14 @@
             ? `Hay ${cantidadGastos(n)} guardados en este dispositivo, en ${cantMeses === 1 ? "1 mes" : cantMeses + " meses"}.`
             : "No hay gastos guardados en este dispositivo.";
         $("botonBorrar").disabled = n === 0 && !estado.reglas.length;
+    }
+
+    async function cambiarNombre(texto) {
+        const nombre = texto.trim().replace(/\s+/g, " ");
+        if (nombre === estado.nombre) return;
+        await H.datos.guardarNombre(nombre);
+        estado.nombre = nombre;
+        dibujar();
     }
 
     async function cambiarTipoDeCambio(mes, texto) {
@@ -1728,7 +1744,8 @@
         });
 
         $("dialogoAjustes").addEventListener("change", e => {
-            if (e.target.dataset.cambio) cambiarTipoDeCambio(e.target.dataset.cambio, e.target.value);
+            if (e.target.id === "campoNombre") cambiarNombre(e.target.value);
+            else if (e.target.dataset.cambio) cambiarTipoDeCambio(e.target.dataset.cambio, e.target.value);
             else if (e.target.dataset.regla) cambiarRegla(e.target.dataset.regla, e.target.value);
         });
 

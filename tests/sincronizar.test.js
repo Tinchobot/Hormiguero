@@ -186,3 +186,18 @@ test("un gasto que cambia de mes se saca del archivo del mes viejo", () => {
     assert.equal(cel.gastos.length, 1, "no queda duplicado");
     assert.equal(cel.gastos[0].mes, "2026-09");
 });
+
+test("el nombre viaja en config.json sin mezclarse con los tipos de cambio", () => {
+    const S = H.sincronizar;
+    const tipos = { "2026-08": { valor: 1400, origen: "pago", actualizado: "1" } };
+    const elementos = [...S.tiposAElementos(tipos), S.nombreAElemento({ valor: "Tincho", actualizado: "2" })];
+    assert.deepEqual(S.elementosATipos(elementos), tipos);
+    assert.deepEqual(S.elementoANombre(elementos), { valor: "Tincho", actualizado: "2" });
+    assert.equal(S.nombreAElemento(null), null);
+    assert.equal(S.elementoANombre(S.tiposAElementos(tipos)), null);
+
+    // Gana el nombre cambiado más recientemente.
+    const plan = S.planificar({ tipos: [S.nombreAElemento({ valor: "Martín", actualizado: "1" })] },
+        { "config.json": { formato: "hormiguero", version: 1, elementos: [S.nombreAElemento({ valor: "Tincho", actualizado: "2" })] } });
+    assert.equal(S.elementoANombre(plan.colecciones.tipos).valor, "Tincho");
+});

@@ -186,7 +186,7 @@ box-shadow:
   - `documentos.json`: resúmenes de tarjeta importados.
   - `reglas.json`: reglas de clasificación por comercio.
   - `fijos.json`: plantillas de gastos que se repiten.
-  - `config.json`: tipos de cambio por mes.
+  - `config.json`: tipos de cambio por mes y el nombre del usuario (para el título "El Hormiguero de …").
 - Cada elemento lleva `id` único y `actualizado` (fecha y hora) para resolver conflictos entre dispositivos (gana el cambio más reciente por elemento). Lo borrado queda como **lápida** `{ id, borrado: true, actualizado, mes }` para que otro dispositivo no lo reviva.
 - El token de Google Identity Services dura una hora y no se puede renovar sin clic en todos los navegadores: si vence, el indicador del encabezado pasa a "Tocá para sincronizar".
 - **Hormiguero guarda su propia copia de cada mes.** Lo que se borre después en Ants (por ejemplo, al limpiar la pantalla) no debe borrar el historial de Hormiguero.
