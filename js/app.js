@@ -27,6 +27,7 @@
         sinAlacranes: false,
         filtro: "todos",    // todos | ants | tarjeta | fijo
         verTodos: false,
+        busqueda: "",       // texto del buscador de movimientos
         pendiente: null,    // resumen leído esperando confirmación
     };
 
@@ -422,15 +423,38 @@
             H.CATEGORIAS.map(c => pildora(c.clave, c.nombre, gastos.filter(g => g.categoria === c.clave).length)).join("");
     }
 
+    let resumenMovimientos = null;
+
     function dibujarMovimientos(r) {
+        resumenMovimientos = r;
         // Un filtro que ya no existe (de una versión anterior) vuelve a Todos.
         if (estado.filtro !== "todos" && !H.categoria(estado.filtro)) estado.filtro = "todos";
-        dibujarFiltros(r.gastos);
 
-        let lista = C.ordenarMovimientos(r.gastos);
+        // Búsqueda: sin mayúsculas ni tildes, sobre el concepto (en los gastos
+        // de tarjeta, el concepto es la descripción del comercio).
+        const consulta = H.normalizar(estado.busqueda);
+        const buscados = consulta
+            ? r.gastos.filter(g => H.normalizar(g.concepto).includes(consulta))
+            : r.gastos;
+        dibujarFiltros(buscados);
+
+        const campo = $("buscadorMovimientos");
+        if (campo.value !== estado.busqueda) campo.value = estado.busqueda;
+        $("borrarBusqueda").hidden = !estado.busqueda;
+
+        let lista = C.ordenarMovimientos(buscados);
         if (estado.filtro !== "todos") lista = lista.filter(g => g.categoria === estado.filtro);
 
         const total = lista.length;
+        const resumen = $("resumenBusqueda");
+        resumen.hidden = !consulta;
+        if (consulta) {
+            const suma = lista.reduce((t, g) => t + (g.montoARS || 0), 0);
+            const texto = estado.busqueda.trim();
+            resumen.textContent = total === 0
+                ? `Sin resultados para «${texto}»`
+                : `${texto.charAt(0).toUpperCase() + texto.slice(1)}: ${total === 1 ? "1 gasto" : total + " gastos"} · ${H.plata(suma)}`;
+        }
         const suma = lista.reduce((t, g) => t + (g.montoARS || 0), 0);
         const sinConvertir = lista.filter(g => g.montoARS == null).length;
         if (!estado.verTodos) lista = lista.slice(0, MOVIMIENTOS_VISIBLES);
@@ -457,6 +481,9 @@
         }).join("");
 
         $("movimientosVacio").hidden = total > 0;
+        $("movimientosVacio").textContent = consulta
+            ? `No encontré gastos con «${estado.busqueda.trim()}» este mes`
+            : "No hay movimientos con este filtro.";
 
         const boton = $("verTodos");
         boton.hidden = !estado.verTodos && total <= MOVIMIENTOS_VISIBLES;
@@ -1767,6 +1794,21 @@
             dibujar();
         });
 
+        $("buscadorMovimientos").addEventListener("input", e => {
+            estado.busqueda = e.target.value;
+            if (resumenMovimientos) dibujarMovimientos(resumenMovimientos);
+        });
+        $("borrarBusqueda").addEventListener("click", () => {
+            estado.busqueda = "";
+            if (resumenMovimientos) dibujarMovimientos(resumenMovimientos);
+            $("buscadorMovimientos").focus();
+        });
+        $("buscadorMovimientos").addEventListener("keydown", e => {
+            if (e.key === "Escape" && estado.busqueda) {
+                estado.busqueda = "";
+                if (resumenMovimientos) dibujarMovimientos(resumenMovimientos);
+            }
+        });
         $("verTodos").addEventListener("click", () => {
             estado.verTodos = !estado.verTodos;
             dibujar();
