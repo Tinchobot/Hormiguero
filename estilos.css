@@ -242,8 +242,14 @@ h2 {
     color: #8A7B4A;
 }
 
-.casilla {
+.casillas {
     margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 20px;
+}
+
+.casilla {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -315,6 +321,10 @@ h2 {
 }
 
 .cat-detalle { font-size: 13px; color: var(--texto-2); margin-top: 2px; }
+
+/* "Ver sin ahorro": la tarjeta se ve, pero no cuenta en el total. */
+.cat.excluida { opacity: 0.55; filter: saturate(0.6); }
+.cat.excluida .cat-detalle { color: var(--texto); }
 
 .cat-fijo        { --c: #00796B; --ct: #00695C; --c1: #F0FBF9; --c2: #C4EAE4; --c3: #86D0C6; }
 .cat-necesario   { --c: #2E7D32; --c1: #F2FBF2; --c2: #CDEBCF; --c3: #9BD3A0; }
@@ -907,7 +917,7 @@ input.campo[type="number"] { width: 120px; }
 @media (max-width: 600px) {
     .encabezado { padding-left: 16px; padding-right: 16px; }
     .contenido { padding-left: 16px; padding-right: 16px; }
-    .casilla { margin-left: 0; }
+    .casillas { margin-left: 0; }
     .numero-grande { font-size: 36px; }
     .grupo-hormiga { flex-basis: 100%; }
     .grupo-hormiga-fila .cat { flex-basis: 100%; }

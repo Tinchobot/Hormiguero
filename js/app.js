@@ -24,7 +24,8 @@
         nombre: "",         // para el título: "El Hormiguero de Tincho"
         vista: "tablero",   // tablero | carga
         mes: null,          // "2026-09"
-        sinAlacranes: false,
+        sinAlacranes: leerPreferencia("hormiguero.sinAlacranes") === "1",
+        sinAhorro: leerPreferencia("hormiguero.sinAhorro") === "1",
         filtro: "todos",    // todos | ants | tarjeta | fijo
         verTodos: false,
         busqueda: "",       // texto del buscador de movimientos
@@ -223,9 +224,13 @@
                 : cantidadGastos(cantidad));
         }
 
-        tarjeta("ahorro", pc.ahorro.cantidad
-            ? `${H.porcentaje(pc.ahorro.total / r.total)} del mes · ${cantidadGastos(pc.ahorro.cantidad)}`
-            : "Sin ahorro cargado");
+        // Con "Ver sin ahorro" la tarjeta sigue con su monto, pero atenuada.
+        $("cat-ahorro").classList.toggle("excluida", estado.sinAhorro);
+        tarjeta("ahorro", estado.sinAhorro
+            ? `<b>No incluido en el total</b>${pc.ahorro.cantidad ? " · " + cantidadGastos(pc.ahorro.cantidad) : ""}`
+            : pc.ahorro.cantidad
+                ? `${H.porcentaje(pc.ahorro.total / r.total)} del mes · ${cantidadGastos(pc.ahorro.cantidad)}`
+                : "Sin ahorro cargado");
     }
 
     // ---------- Gráficos ----------
@@ -295,7 +300,9 @@
     }
 
     function dibujarReparto(r) {
-        const filas = H.CATEGORIAS.map(c => ({ nombre: c.nombre, color: c.color, total: r.porCategoria[c.clave].total }));
+        const filas = H.CATEGORIAS
+            .filter(c => !(estado.sinAhorro && c.clave === "ahorro"))
+            .map(c => ({ nombre: c.nombre, color: c.color, total: r.porCategoria[c.clave].total }));
         if (r.porClasificar.cantidad) {
             filas.push({ nombre: "Por clasificar", color: COLOR_SIN_CATEGORIA, total: r.porClasificar.total });
         }
@@ -414,12 +421,14 @@
     }
 
     // Filtros: Todos y las seis categorías, cada una con su cantidad.
+    // Con "Ver sin ahorro", Todos no cuenta los ahorros; su píldora sí.
     function dibujarFiltros(gastos) {
+        const aTodos = estado.sinAhorro ? gastos.filter(g => g.categoria !== "ahorro") : gastos;
         const pildora = (filtro, nombre, cantidad) =>
             `<button type="button" class="pildora" data-filtro="${filtro}" aria-pressed="${filtro === estado.filtro}"` +
             `${cantidad === 0 ? ` data-vacio="si"` : ""}>${nombre} (${cantidad})</button>`;
         $("filtrosMovimientos").innerHTML =
-            pildora("todos", "Todos", gastos.length) +
+            pildora("todos", "Todos", aTodos.length) +
             H.CATEGORIAS.map(c => pildora(c.clave, c.nombre, gastos.filter(g => g.categoria === c.clave).length)).join("");
     }
 
@@ -444,6 +453,7 @@
 
         let lista = C.ordenarMovimientos(buscados);
         if (estado.filtro !== "todos") lista = lista.filter(g => g.categoria === estado.filtro);
+        else if (estado.sinAhorro) lista = lista.filter(g => g.categoria !== "ahorro");
 
         const total = lista.length;
         const resumen = $("resumenBusqueda");
@@ -510,14 +520,26 @@
         return `<span class="variacion ${clase}">${sube ? "↑" : "↓"} ${H.porcentaje(Math.abs(fraccion), true)}</span>`;
     }
 
+    function opcionesVista() {
+        return { sinAlacranes: estado.sinAlacranes, sinAhorro: estado.sinAhorro };
+    }
+
+    // ", sin alacranes" / ", sin ahorro" / ", sin alacranes ni ahorro"
+    function textoSin() {
+        if (estado.sinAlacranes && estado.sinAhorro) return ", sin alacranes ni ahorro";
+        if (estado.sinAlacranes) return ", sin alacranes";
+        if (estado.sinAhorro) return ", sin ahorro";
+        return "";
+    }
+
     function dibujarHistorial() {
-        const opciones = { sinAlacranes: estado.sinAlacranes };
+        const opciones = opcionesVista();
         const hayHistoria = C.mesesConDatos(estado.gastos).filter(m => m <= estado.mes).length >= 2;
         $("conEvolucion").hidden = !hayHistoria;
         $("sinEvolucion").hidden = hayHistoria;
         $("filaComparaciones").hidden = !hayHistoria;
         $("subtituloEvolucion").textContent = hayHistoria
-            ? `Hasta ${mesConAnio(estado.mes)}${estado.sinAlacranes ? ", sin alacranes" : ""}. Tocá una barra para ver ese mes.`
+            ? `Hasta ${mesConAnio(estado.mes)}${textoSin()}. Tocá una barra para ver ese mes.`
             : "";
         if (!hayHistoria) return;
 
@@ -531,7 +553,9 @@
         mesesEvolucion = serie.map(r => r.mes);
         const elegido = mesesEvolucion.indexOf(estado.mes);
 
-        const capas = H.CATEGORIAS.map(c => ({ nombre: c.nombre, color: c.color, valor: r => r.porCategoria[c.clave].total }));
+        const capas = H.CATEGORIAS
+            .filter(c => !(opciones.sinAhorro && c.clave === "ahorro"))
+            .map(c => ({ nombre: c.nombre, color: c.color, valor: r => r.porCategoria[c.clave].total }));
         if (serie.some(r => r.porClasificar.total > 0)) {
             capas.push({ nombre: "Por clasificar", color: COLOR_SIN_CATEGORIA, valor: r => r.porClasificar.total });
         }
@@ -657,7 +681,7 @@
         const nombre = H.nombreMes(estado.mes);
         $("tituloComparacionMes").textContent = `${nombre.replace(/^./, l => l.toUpperCase())} contra su historia`;
         $("subtituloComparacionMes").textContent = c.mesesPromedio
-            ? `Promedio de ${c.mesesPromedio === 1 ? "el mes anterior con datos" : `los ${c.mesesPromedio} meses anteriores con datos`} (hasta 12)${estado.sinAlacranes ? ", sin alacranes" : ""}.`
+            ? `Promedio de ${c.mesesPromedio === 1 ? "el mes anterior con datos" : `los ${c.mesesPromedio} meses anteriores con datos`} (hasta 12)${textoSin()}.`
             : "Todavía no hay meses anteriores para comparar.";
 
         const celda = valor => valor == null ? `<span class="tenue">—</span>` : H.plataRedonda(valor);
@@ -701,7 +725,7 @@
         $("tablero").hidden = !hayDatos;
         if (!hayDatos) return;
 
-        const opciones = { sinAlacranes: estado.sinAlacranes };
+        const opciones = opcionesVista();
         const r = C.resumenMes(estado.gastos, estado.mes, opciones);
         const anterior = C.resumenMes(estado.gastos, H.mesAnterior(estado.mes), opciones);
 
@@ -1789,8 +1813,17 @@
             if (archivo) await cargarArchivo(archivo);
         });
 
+        // Las dos casillas se recuerdan entre visitas.
+        $("sinAlacranes").checked = estado.sinAlacranes;
+        $("sinAhorro").checked = estado.sinAhorro;
         $("sinAlacranes").addEventListener("change", e => {
             estado.sinAlacranes = e.target.checked;
+            guardarPreferencia("hormiguero.sinAlacranes", estado.sinAlacranes ? "1" : null);
+            dibujar();
+        });
+        $("sinAhorro").addEventListener("change", e => {
+            estado.sinAhorro = e.target.checked;
+            guardarPreferencia("hormiguero.sinAhorro", estado.sinAhorro ? "1" : null);
             dibujar();
         });
 

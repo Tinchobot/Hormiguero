@@ -11,6 +11,9 @@
 
     // Totales y cantidades del mes por categoría.
     // sinAlacranes: deja afuera los alacranes de todos los totales.
+    // sinAhorro: el ahorro no suma al total del mes (ni a nada que se calcule
+    // sobre él), pero porCategoria.ahorro conserva su monto real y `gastos`
+    // lo sigue incluyendo, para poder mostrarlo aparte.
     function resumenMes(todos, mes, opciones = {}) {
         let gastos = todos.filter(g => g.mes === mes);
         if (opciones.sinAlacranes) gastos = gastos.filter(g => g.categoria !== "alacran");
@@ -21,22 +24,25 @@
             porCategoria[c.clave] = { total: sumar(deCat), cantidad: deCat.length };
         }
 
+        // Lo que cuenta para el total del mes y sus avisos.
+        const contados = opciones.sinAhorro ? gastos.filter(g => g.categoria !== "ahorro") : gastos;
+
         const hormigas = H.HORMIGAS.reduce((t, c) => t + porCategoria[c].total, 0);
         const evitables = porCategoria.evitable.total + porCategoria.innecesario.total;
-        const total = sumar(gastos);
+        const total = sumar(contados);
 
         // Movimientos de tarjeta que todavía no tienen categoría: suman al
         // total del mes pero no a ninguna categoría.
-        const sinCategoria = gastos.filter(g => !g.categoria);
+        const sinCategoria = contados.filter(g => !g.categoria);
         const porClasificar = { total: sumar(sinCategoria), cantidad: sinCategoria.length };
 
-        const deImpuestos = gastos.filter(g => g.esImpuesto);
+        const deImpuestos = contados.filter(g => g.esImpuesto);
         const impuestos = { total: sumar(deImpuestos), cantidad: deImpuestos.length, gastos: deImpuestos };
 
-        const sinCambio = gastos.filter(g => g.montoARS == null).length;
+        const sinCambio = contados.filter(g => g.montoARS == null).length;
 
         // Copias de fijos que se crearon solas y falta confirmar. Ya suman.
-        const deFijos = gastos.filter(g => g.pendiente);
+        const deFijos = contados.filter(g => g.pendiente);
         const pendientes = { total: sumar(deFijos), cantidad: deFijos.length, gastos: deFijos };
 
         return { mes, gastos, porCategoria, hormigas, evitables, total, porClasificar, impuestos, sinCambio, pendientes };
@@ -195,7 +201,9 @@
             };
         };
 
-        const filas = H.CATEGORIAS.map(c => fila(c.clave, c.nombre, r => r.porCategoria[c.clave].total));
+        const filas = H.CATEGORIAS
+            .filter(c => !(opciones.sinAhorro && c.clave === "ahorro"))
+            .map(c => fila(c.clave, c.nombre, r => r.porCategoria[c.clave].total));
         filas.push(fila("hormigas", "Gastos hormiga", r => r.hormigas));
         filas.push(fila("total", "Total del mes", r => r.total));
         return { mes, mesesPromedio: previos.length, filas };
